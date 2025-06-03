@@ -1,0 +1,349 @@
+menu "LoRa Basics Modem Configuration"
+
+    choice LBM_RADIO_TYPE
+        prompt "Radio Type"
+        default LBM_RADIO_SX126X
+        help
+            Select the LoRa radio chip type
+
+        config LBM_RADIO_SX126X
+            bool "SX126X Series (SX1261, SX1262, SX1268)"
+        config LBM_RADIO_SX127X
+            bool "SX127X Series (SX1272, SX1276)"
+        config LBM_RADIO_LR11XX
+            bool "LR11XX Series (LR1110, LR1120, LR1121)"
+        config LBM_RADIO_SX128X
+            bool "SX128X Series (SX1280, SX1281)"
+    endchoice
+
+    menu "LoRaWAN Regions"
+        config LBM_REGION_EU_868
+            bool "EU868"
+            default y
+            help
+                Enable EU868 regional parameters
+                
+        config LBM_REGION_US_915
+            bool "US915"
+            default y
+            help
+                Enable US915 regional parameters
+                
+        config LBM_REGION_AS_923
+            bool "AS923"
+            default n
+            help
+                Enable AS923 regional parameters
+                
+        config LBM_REGION_AU_915
+            bool "AU915"
+            default n
+            help
+                Enable AU915 regional parameters
+                
+        config LBM_REGION_CN_470
+            bool "CN470"
+            default n
+            help
+                Enable CN470 regional parameters
+                
+        config LBM_REGION_IN_865
+            bool "IN865"
+            default n
+            help
+                Enable IN865 regional parameters
+                
+        config LBM_REGION_KR_920
+            bool "KR920"
+            default n
+            help
+                Enable KR920 regional parameters
+                
+        config LBM_REGION_RU_864
+            bool "RU864"
+            default n
+            help
+                Enable RU864 regional parameters
+    endmenu
+
+    menu "Optional Features"
+        config LBM_STREAM
+            bool "Enable Stream Service"
+            default y
+            help
+                Enable LoRaCloud stream service
+                
+        config LBM_DEVICE_MANAGEMENT
+            bool "Enable Device Management"
+            default y
+            help
+                Enable LoRaCloud device management service
+                
+        config LBM_ALMANAC
+            bool "Enable Almanac Service"
+            default n
+            help
+                Enable almanac service for geolocation
+                
+        config LBM_GEOLOCATION
+            bool "Enable Geolocation Services"
+            default n
+            help
+                Enable geolocation services (GNSS, WiFi scanning)
+                
+        config LBM_RELAY_TX
+            bool "Enable Relay TX"
+            default n
+            help
+                Enable LoRaWAN Relay TX functionality
+                
+        config LBM_RELAY_RX
+            bool "Enable Relay RX"
+            default n
+            help
+                Enable LoRaWAN Relay RX functionality
+                
+        config LBM_CSMA
+            bool "Enable CSMA"
+            default n
+            help
+                Enable Carrier Sense Multiple Access
+                
+        config LBM_LBT
+            bool "Enable Listen Before Talk"
+            default y
+            help
+                Enable Listen Before Talk functionality
+    endmenu
+
+    menu "Hardware Configuration"
+        config LBM_SPI_FREQUENCY
+            int "SPI Frequency (Hz)"
+            default 8000000
+            range 1000000 20000000
+            help
+                SPI frequency for radio communication
+                
+        config LBM_RADIO_NSS_PIN
+            int "Radio NSS Pin"
+            default 5
+            help
+                GPIO pin for radio NSS (Chip Select)
+                
+        config LBM_RADIO_RESET_PIN
+            int "Radio Reset Pin"
+            default 14
+            help
+                GPIO pin for radio reset
+                
+        config LBM_RADIO_BUSY_PIN
+            int "Radio Busy Pin"
+            default 32
+            help
+                GPIO pin for radio busy signal
+                
+        config LBM_RADIO_DIO1_PIN
+            int "Radio DIO1 Pin"
+            default 33
+            help
+                GPIO pin for radio DIO1 interrupt
+                
+        config LBM_RADIO_DIO2_PIN
+            int "Radio DIO2 Pin"
+            default -1
+            help
+                GPIO pin for radio DIO2 (optional, set to -1 if not used)
+                
+        config LBM_RADIO_DIO3_PIN
+            int "Radio DIO3 Pin"
+            default -1
+            help
+                GPIO pin for radio DIO3 (optional, set to -1 if not used)
+    endmenu
+
+    menu "SX126X Configuration"
+        depends on LBM_RADIO_SX126X
+        
+        config LBM_SX126X_USE_LDO_REGULATOR
+            bool "Use LDO Regulator Mode"
+            default n
+            help
+                Use LDO regulator instead of DCDC (lower efficiency but better noise)
+                
+        config LBM_SX126X_USE_DIO2_RF_SWITCH
+            bool "Use DIO2 as RF Switch"
+            default y
+            help
+                Configure DIO2 pin as RF switch control
+                
+        config LBM_SX126X_USE_TCXO
+            bool "Use TCXO"
+            default n
+            help
+                Use Temperature Compensated Crystal Oscillator instead of crystal
+                
+        choice LBM_SX126X_TCXO_VOLTAGE
+            prompt "TCXO Supply Voltage"
+            depends on LBM_SX126X_USE_TCXO
+            default LBM_SX126X_TCXO_3_0V
+            
+            config LBM_SX126X_TCXO_1_6V
+                bool "1.6V"
+            config LBM_SX126X_TCXO_1_7V
+                bool "1.7V"
+            config LBM_SX126X_TCXO_1_8V
+                bool "1.8V"
+            config LBM_SX126X_TCXO_2_2V
+                bool "2.2V"
+            config LBM_SX126X_TCXO_2_4V
+                bool "2.4V"
+            config LBM_SX126X_TCXO_2_7V
+                bool "2.7V"
+            config LBM_SX126X_TCXO_3_0V
+                bool "3.0V"
+            config LBM_SX126X_TCXO_3_3V
+                bool "3.3V"
+        endchoice
+        
+        config LBM_SX126X_TCXO_STARTUP_TIME_MS
+            int "TCXO Startup Time (ms)"
+            depends on LBM_SX126X_USE_TCXO
+            default 5
+            range 1 1000
+            help
+                TCXO startup time in milliseconds
+                
+        config LBM_SX126X_TRIM_CAP_XTA
+            hex "Trimming Capacitor XTA"
+            default 0x09
+            range 0x00 0x2F
+            help
+                Trimming capacitor value for XTA pin
+                
+        config LBM_SX126X_TRIM_CAP_XTB
+            hex "Trimming Capacitor XTB"
+            default 0x09
+            range 0x00 0x2F
+            help
+                Trimming capacitor value for XTB pin
+                
+        config LBM_SX126X_RX_BOOST_ENABLE
+            bool "Enable RX Boost"
+            default n
+            help
+                Enable RX boost for better sensitivity (-3dB improvement)
+                
+        config LBM_SX126X_OCP_VALUE
+            hex "Over Current Protection Value"
+            default 0x38
+            range 0x00 0x3F
+            help
+                OCP value in steps of 2.5mA (0x38 = 140mA)
+                
+        config LBM_SX126X_CAD_DET_PEAK
+            hex "CAD Detection Peak"
+            default 0x18
+            range 0x00 0xFF
+            help
+                Channel Activity Detection peak value
+                
+        choice LBM_SX126X_PA_RAMP_TIME
+            prompt "PA Ramp Time"
+            default LBM_SX126X_RAMP_40_US
+            
+            config LBM_SX126X_RAMP_10_US
+                bool "10 us"
+            config LBM_SX126X_RAMP_20_US
+                bool "20 us"  
+            config LBM_SX126X_RAMP_40_US
+                bool "40 us"
+            config LBM_SX126X_RAMP_80_US
+                bool "80 us"
+            config LBM_SX126X_RAMP_200_US
+                bool "200 us"
+            config LBM_SX126X_RAMP_800_US
+                bool "800 us"
+            config LBM_SX126X_RAMP_1700_US
+                bool "1700 us"
+            config LBM_SX126X_RAMP_3400_US
+                bool "3400 us"
+        endchoice
+    endmenu
+
+    menu "SX127X Configuration"
+        depends on LBM_RADIO_SX127X
+        
+        config LBM_SX127X_BOARD_TYPE_MAS
+            bool "High Power Board (MAS)"
+            default n
+            help
+                Enable for high power board variant (supports +20dBm)
+                
+        config LBM_SX127X_OCP_TRIM_VALUE
+            hex "OCP Trim Value"
+            default 0x0B
+            range 0x00 0x1F
+            help
+                Over Current Protection trim value (0x0B = 100mA)
+                
+        choice LBM_SX127X_PA_RAMP_TIME
+            prompt "PA Ramp Time"
+            default LBM_SX127X_RAMP_40_US
+            
+            config LBM_SX127X_RAMP_3400_US
+                bool "3400 us"
+            config LBM_SX127X_RAMP_2000_US
+                bool "2000 us"
+            config LBM_SX127X_RAMP_1000_US
+                bool "1000 us"
+            config LBM_SX127X_RAMP_500_US
+                bool "500 us"
+            config LBM_SX127X_RAMP_250_US
+                bool "250 us"
+            config LBM_SX127X_RAMP_125_US
+                bool "125 us"
+            config LBM_SX127X_RAMP_100_US
+                bool "100 us"
+            config LBM_SX127X_RAMP_62_US
+                bool "62 us"
+            config LBM_SX127X_RAMP_50_US
+                bool "50 us"
+            config LBM_SX127X_RAMP_40_US
+                bool "40 us"
+            config LBM_SX127X_RAMP_31_US
+                bool "31 us"
+            config LBM_SX127X_RAMP_25_US
+                bool "25 us"
+            config LBM_SX127X_RAMP_20_US
+                bool "20 us"
+            config LBM_SX127X_RAMP_15_US
+                bool "15 us"
+            config LBM_SX127X_RAMP_12_US
+                bool "12 us"
+            config LBM_SX127X_RAMP_10_US
+                bool "10 us"
+        endchoice
+    endmenu
+
+    menu "Debug Configuration"
+        config LBM_HAL_DBG_TRACE
+            bool "Enable HAL Debug Traces"
+            default y
+            help
+                Enable debug traces in HAL layer
+                
+        config LBM_MODEM_DBG_TRACE
+            bool "Enable Modem Debug Traces"
+            default y
+            help
+                Enable debug traces in modem core
+                
+        config LBM_TRACE_LEVEL
+            int "Debug Trace Level"
+            default 3
+            range 0 5
+            help
+                Debug trace level (0=None, 1=Error, 2=Warning, 3=Info, 4=Debug, 5=Verbose)
+    endmenu
+
+endmenu
