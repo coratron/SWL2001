@@ -168,39 +168,37 @@ void ral_sx126x_bsp_get_tx_cfg(const void* context,
     int8_t power_dbm = input_params->system_output_pwr_in_dbm;
     uint32_t freq_hz = input_params->freq_in_hz;
     
-    // Determine which PA to use based on power level and frequency
-    if (power_dbm <= SX126X_LP_MAX_OUTPUT_POWER) {
-        // Use Low Power PA
-        output_params->pa_cfg.pa_select = SX126X_PA_SEL_LP;
-        output_params->pa_cfg.pa_lut = 0x01;  // Default LUT
+    // Configure PA parameters based on power level
+    // For SX126X, we use device_sel to choose between SX1261 (0x01) and SX1262/SX1268 (0x00)
+    // Most ESP32 modules use SX1262, so default to device_sel = 0x00
+    output_params->pa_cfg.device_sel = 0x00;  // SX1262/SX1268
+    output_params->pa_cfg.pa_lut = 0x01;      // Default LUT value
+    
+    // Configure HP (High Power) settings
+    if (power_dbm > 14) {
+        output_params->pa_cfg.hp_max = 0x07;         // Max HP setting
+        output_params->pa_cfg.pa_duty_cycle = 0x04;  // Default duty cycle
         
-        // Clamp power to valid range
-        if (power_dbm < SX126X_LP_MIN_OUTPUT_POWER) {
-            power_dbm = SX126X_LP_MIN_OUTPUT_POWER;
+        // Clamp power to valid range for HP
+        if (power_dbm > 22) {
+            power_dbm = 22;
         }
         
-        output_params->chip_output_pwr_in_dbm_configured = power_dbm;
-        output_params->chip_output_pwr_in_dbm_expected = power_dbm;
-        
-        ESP_LOGD(TAG, "Using LP PA for %d dBm", power_dbm);
+        ESP_LOGD(TAG, "Using HP settings for %d dBm", power_dbm);
     } else {
-        // Use High Power PA
-        output_params->pa_cfg.pa_select = SX126X_PA_SEL_HP;
-        output_params->pa_cfg.pa_lut = 0x04;  // Default LUT for HP
+        output_params->pa_cfg.hp_max = 0x02;         // Lower HP setting
+        output_params->pa_cfg.pa_duty_cycle = 0x02;  // Lower duty cycle
         
-        // Clamp power to valid range
-        if (power_dbm > SX126X_HP_MAX_OUTPUT_POWER) {
-            power_dbm = SX126X_HP_MAX_OUTPUT_POWER;
-        }
-        if (power_dbm < SX126X_HP_MIN_OUTPUT_POWER) {
-            power_dbm = SX126X_HP_MIN_OUTPUT_POWER;
+        // Clamp power to valid range for LP
+        if (power_dbm < -9) {
+            power_dbm = -9;
         }
         
-        output_params->chip_output_pwr_in_dbm_configured = power_dbm;
-        output_params->chip_output_pwr_in_dbm_expected = power_dbm;
-        
-        ESP_LOGD(TAG, "Using HP PA for %d dBm", power_dbm);
+        ESP_LOGD(TAG, "Using LP settings for %d dBm", power_dbm);
     }
+    
+    output_params->chip_output_pwr_in_dbm_configured = power_dbm;
+    output_params->chip_output_pwr_in_dbm_expected = power_dbm;
     
     // Set ramp time based on configuration
 #if defined(CONFIG_LBM_SX126X_RAMP_10_US)
@@ -223,9 +221,8 @@ void ral_sx126x_bsp_get_tx_cfg(const void* context,
     output_params->pa_ramp_time = SX126X_RAMP_40_US;  // Default ramp time
 #endif
     
-    ESP_LOGD(TAG, "TX config: power=%d dBm, freq=%lu Hz, PA=%s", 
-             power_dbm, freq_hz, 
-             (output_params->pa_cfg.pa_select == SX126X_PA_SEL_LP) ? "LP" : "HP");
+    ESP_LOGD(TAG, "TX config: power=%d dBm, freq=%lu Hz, device_sel=0x%02X", 
+             power_dbm, freq_hz, output_params->pa_cfg.device_sel);
 }
 
 void ral_sx126x_bsp_get_xosc_cfg(const void* context, ral_xosc_cfg_t* xosc_cfg,
@@ -355,13 +352,16 @@ void ral_sx126x_bsp_get_cad_det_peak(const void* context, uint8_t* cad_det_peak)
 ral_status_t ral_sx126x_bsp_get_instantaneous_tx_power_consumption(
     const void* context,
     const ral_sx126x_bsp_tx_cfg_output_params_t* tx_cfg_output_params_local,
-    uint32_t* pwr_consumption_in_ua)
+    sx126x_reg_mod_t radio_reg_mode, uint32_t* pwr_consumption_in_ua)
 {
     (void)context;
+    (void)radio_reg_mode;
     
     int8_t power_dbm = tx_cfg_output_params_local->chip_output_pwr_in_dbm_configured;
     
-    if (tx_cfg_output_params_local->pa_cfg.pa_select == SX126X_PA_SEL_LP) {
+    // Use hp_max to determine if we're using LP or HP mode
+    // hp_max <= 0x02 indicates LP mode, hp_max >= 0x07 indicates HP mode
+    if (tx_cfg_output_params_local->pa_cfg.hp_max <= 0x02) {
         // Low Power PA
         int index = power_dbm - SX126X_LP_MIN_OUTPUT_POWER;
         if (index >= 0 && index < (int)(sizeof(ral_sx126x_convert_tx_dbm_to_ua_reg_mode_dcdc_lp) / sizeof(uint32_t))) {
@@ -386,9 +386,10 @@ ral_status_t ral_sx126x_bsp_get_instantaneous_tx_power_consumption(
 }
 
 ral_status_t ral_sx126x_bsp_get_instantaneous_gfsk_rx_power_consumption(
-    const void* context, bool rx_boosted, uint32_t* pwr_consumption_in_ua)
+    const void* context, sx126x_reg_mod_t radio_reg_mode, bool rx_boosted, uint32_t* pwr_consumption_in_ua)
 {
     (void)context;
+    (void)radio_reg_mode;
     
     if (rx_boosted) {
         *pwr_consumption_in_ua = SX126X_GFSK_RX_BOOSTED_CONSUMPTION_DCDC;
@@ -403,9 +404,10 @@ ral_status_t ral_sx126x_bsp_get_instantaneous_gfsk_rx_power_consumption(
 }
 
 ral_status_t ral_sx126x_bsp_get_instantaneous_lora_rx_power_consumption(
-    const void* context, bool rx_boosted, uint32_t* pwr_consumption_in_ua)
+    const void* context, sx126x_reg_mod_t radio_reg_mode, bool rx_boosted, uint32_t* pwr_consumption_in_ua)
 {
     (void)context;
+    (void)radio_reg_mode;
     
     if (rx_boosted) {
         *pwr_consumption_in_ua = SX126X_LORA_RX_BOOSTED_CONSUMPTION_DCDC;

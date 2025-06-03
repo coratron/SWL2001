@@ -108,24 +108,21 @@ void ral_sx127x_bsp_get_tx_cfg(const void* context,
         // Low power board (up to +14dBm with RFO pin)
         if (power_dbm <= 14) {
             output_params->pa_cfg.pa_select = SX127X_PA_SELECT_RFO;
-            output_params->pa_cfg.max_power = 0x04;  // Pmax = 10.8 + 0.6 * MaxPower
-            output_params->pa_cfg.output_power = power_dbm + 1;  // OutputPower = Pout - Pmax + 15
+            output_params->pa_cfg.is_20_dbm_output_on = false;
         } else {
             // Use PA_BOOST for higher power (up to +17dBm)
-            output_params->pa_cfg.pa_select = SX127X_PA_SELECT_PA_BOOST;
-            output_params->pa_cfg.max_power = 0x07;  // Max power for PA_BOOST
-            output_params->pa_cfg.output_power = power_dbm - 2;  // OutputPower = Pout - 2
+            output_params->pa_cfg.pa_select = SX127X_PA_SELECT_BOOST;
+            output_params->pa_cfg.is_20_dbm_output_on = false;
         }
     } else {
         // High power board (SX1276MB1MAS) - use PA_BOOST for all power levels
-        output_params->pa_cfg.pa_select = SX127X_PA_SELECT_PA_BOOST;
-        output_params->pa_cfg.max_power = 0x07;  // Max power for PA_BOOST
+        output_params->pa_cfg.pa_select = SX127X_PA_SELECT_BOOST;
         
         if (power_dbm <= 17) {
-            output_params->pa_cfg.output_power = power_dbm - 2;  // OutputPower = Pout - 2
+            output_params->pa_cfg.is_20_dbm_output_on = false;
         } else {
             // For +20dBm operation, need special configuration
-            output_params->pa_cfg.output_power = 15;  // Max OutputPower
+            output_params->pa_cfg.is_20_dbm_output_on = true;
         }
     }
     
@@ -169,10 +166,10 @@ void ral_sx127x_bsp_get_tx_cfg(const void* context,
     output_params->chip_output_pwr_in_dbm_configured = power_dbm;
     output_params->chip_output_pwr_in_dbm_expected = power_dbm;
     
-    ESP_LOGD(TAG, "TX config: power=%d dBm, freq=%lu Hz, PA=%s, OutputPower=%d", 
+    ESP_LOGD(TAG, "TX config: power=%d dBm, freq=%lu Hz, PA=%s, 20dBm=%s", 
              power_dbm, freq_hz,
              (output_params->pa_cfg.pa_select == SX127X_PA_SELECT_RFO) ? "RFO" : "PA_BOOST",
-             output_params->pa_cfg.output_power);
+             output_params->pa_cfg.is_20_dbm_output_on ? "enabled" : "disabled");
 }
 
 void ral_sx127x_bsp_get_ocp_value(const void* context, uint8_t* ocp_trim_value)

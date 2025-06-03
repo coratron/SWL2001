@@ -3,7 +3,7 @@
  *
  * \brief     ESP32 Hardware Abstraction Layer implementation for LoRa Basics Modem
  *
- * \copyright Copyright (c) 2023
+ * \copyright Copyright (c) 2023 The Things Industries B.V.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -16,12 +16,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_random.h"
 #include "esp_sleep.h"
+#include "esp_task_wdt.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
@@ -30,7 +33,6 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "driver/rtc_io.h"
-#include "soc/rtc_wdt.h"
 
 #include "smtc_modem_hal.h"
 
@@ -68,8 +70,10 @@ typedef struct
 
 static lbm_timer_t lbm_timer = {0};
 static SemaphoreHandle_t spi_mutex = NULL;
-static nvs_handle_t nvs_handle;
+static nvs_handle_t nvs_hal_handle;
 static bool nvs_initialized = false;
+static portMUX_TYPE modem_irq_mux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE irq_mux = portMUX_INITIALIZER_UNLOCKED;
 
 /*
  * -----------------------------------------------------------------------------
@@ -158,12 +162,12 @@ void smtc_modem_hal_stop_timer(void)
 /* ------------ IRQ management ------------*/
 void smtc_modem_hal_disable_modem_irq(void)
 {
-    taskENTER_CRITICAL();
+    taskENTER_CRITICAL(&irq_mux);
 }
 
 void smtc_modem_hal_enable_modem_irq(void)
 {
-    taskEXIT_CRITICAL();
+    taskEXIT_CRITICAL(&irq_mux);
 }
 
 /* ------------ Context saving management ------------*/
@@ -180,7 +184,7 @@ void smtc_modem_hal_context_restore(const modem_context_type_t ctx_type, uint32_
     snprintf(key, sizeof(key), "ctx_%d_%lu", ctx_type, offset);
 
     size_t required_size = size;
-    esp_err_t err = nvs_get_blob(nvs_handle, key, buffer, &required_size);
+    esp_err_t err = nvs_get_blob(nvs_hal_handle, key, buffer, &required_size);
     
     if (err != ESP_OK || required_size != size) {
         ESP_LOGW(TAG, "Context restore failed for key %s, initializing with zeros", key);
@@ -200,59 +204,143 @@ void smtc_modem_hal_context_store(const modem_context_type_t ctx_type, uint32_t 
     char key[MAX_NVS_KEY_LENGTH];
     snprintf(key, sizeof(key), "ctx_%d_%lu", ctx_type, offset);
 
-    esp_err_t err = nvs_set_blob(nvs_handle, key, buffer, size);
+    esp_err_t err = nvs_set_blob(nvs_hal_handle, key, buffer, size);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to store context for key %s", key);
         return;
     }
 
-    err = nvs_commit(nvs_handle);
+    err = nvs_commit(nvs_hal_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to commit NVS");
     }
 }
 
 /* ------------ Crashlog management ------------*/
-void smtc_modem_hal_store_crashlog(uint8_t crashlog[CRASH_LOG_SIZE])
+void smtc_modem_hal_crashlog_store(const uint8_t* crash_string, uint8_t crash_string_length)
 {
-    ESP_LOGI(TAG, "Storing crashlog");
-    smtc_modem_hal_context_store(CONTEXT_CRASHLOG, 0, crashlog, CRASH_LOG_SIZE);
+    if (!nvs_initialized) {
+        if (init_nvs() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize NVS");
+            return;
+        }
+    }
+
+    ESP_LOGI(TAG, "Storing crashlog (%d bytes)", crash_string_length);
+    
+    // Store the crashlog data
+    esp_err_t err = nvs_set_blob(nvs_hal_handle, "crashlog_data", crash_string, crash_string_length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store crashlog data");
+        return;
+    }
+    
+    // Store the crashlog length
+    err = nvs_set_u8(nvs_hal_handle, "crashlog_len", crash_string_length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store crashlog length");
+        return;
+    }
+
+    // Set status to available
+    smtc_modem_hal_crashlog_set_status(true);
+    
+    err = nvs_commit(nvs_hal_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit crashlog to NVS");
+    }
 }
 
-void smtc_modem_hal_get_crashlog(uint8_t crashlog[CRASH_LOG_SIZE])
+void smtc_modem_hal_crashlog_restore(uint8_t* crash_string, uint8_t* crash_string_length)
 {
+    if (!nvs_initialized) {
+        if (init_nvs() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize NVS");
+            return;
+        }
+    }
+
     ESP_LOGI(TAG, "Retrieving crashlog");
-    smtc_modem_hal_context_restore(CONTEXT_CRASHLOG, 0, crashlog, CRASH_LOG_SIZE);
+    
+    // Get the crashlog length first
+    uint8_t length = 0;
+    esp_err_t err = nvs_get_u8(nvs_hal_handle, "crashlog_len", &length);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "No crashlog length found");
+        *crash_string_length = 0;
+        return;
+    }
+    
+    // Limit length to maximum size
+    length = (length > CRASH_LOG_SIZE) ? CRASH_LOG_SIZE : length;
+    
+    // Get the crashlog data
+    size_t required_size = length;
+    err = nvs_get_blob(nvs_hal_handle, "crashlog_data", crash_string, &required_size);
+    if (err != ESP_OK || required_size != length) {
+        ESP_LOGW(TAG, "Failed to retrieve crashlog data");
+        *crash_string_length = 0;
+        return;
+    }
+    
+    *crash_string_length = length;
 }
 
-void smtc_modem_hal_set_crashlog_status(bool available)
+void smtc_modem_hal_crashlog_set_status(bool available)
 {
+    if (!nvs_initialized) {
+        if (init_nvs() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize NVS");
+            return;
+        }
+    }
+
     uint8_t status = available ? 1 : 0;
-    smtc_modem_hal_context_store(CONTEXT_CRASHLOG, CRASH_LOG_SIZE, &status, 1);
+    esp_err_t err = nvs_set_u8(nvs_hal_handle, "crashlog_avail", status);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store crashlog status");
+        return;
+    }
+    
+    err = nvs_commit(nvs_hal_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit crashlog status to NVS");
+    }
 }
 
-bool smtc_modem_hal_get_crashlog_status(void)
+bool smtc_modem_hal_crashlog_get_status(void)
 {
+    if (!nvs_initialized) {
+        if (init_nvs() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize NVS");
+            return false;
+        }
+    }
+
     uint8_t status = 0;
-    smtc_modem_hal_context_restore(CONTEXT_CRASHLOG, CRASH_LOG_SIZE, &status, 1);
+    esp_err_t err = nvs_get_u8(nvs_hal_handle, "crashlog_avail", &status);
+    if (err != ESP_OK) {
+        return false;
+    }
+    
     return (status == 1);
 }
 
 /* ------------ assert management ------------*/
 void smtc_modem_hal_on_panic(uint8_t* func, uint32_t line, const char* fmt, ...)
 {
-    ESP_LOGE(TAG, "PANIC in function %s at line %lu", func, line);
-    
+    uint8_t out_buff[255] = {0};
+    uint8_t out_len = snprintf((char*)out_buff, sizeof(out_buff), "%s:%lu ", func, line);
+
     va_list args;
     va_start(args, fmt);
-    esp_log_writev(ESP_LOG_ERROR, TAG, fmt, args);
+    out_len += vsnprintf((char*)&out_buff[out_len], sizeof(out_buff) - out_len, fmt, args);
     va_end(args);
-    
+
     // Store crash information before reset
-    uint8_t crashlog[CRASH_LOG_SIZE] = {0};
-    snprintf((char*)crashlog, sizeof(crashlog), "PANIC: %s:%lu", func, line);
-    smtc_modem_hal_store_crashlog(crashlog);
-    smtc_modem_hal_set_crashlog_status(true);
+    smtc_modem_hal_crashlog_store(out_buff, out_len);
+
+    ESP_LOGE(TAG, "Modem panic: %s", out_buff);
     
     // Reset the system
     esp_restart();
@@ -369,7 +457,7 @@ static esp_err_t init_nvs(void)
     }
     ESP_ERROR_CHECK(err);
 
-    err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_hal_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error opening NVS handle: %s", esp_err_to_name(err));
         return err;

@@ -96,10 +96,10 @@ static SemaphoreHandle_t spi_mutex = NULL;
  * --- PRIVATE FUNCTIONS DECLARATION -------------------------------------------
  */
 
-static void IRAM_ATTR dio1_isr_handler(void* arg);
+static void dio1_isr_handler(void* arg);
 #ifdef CONFIG_LBM_RADIO_SX127X
-static void IRAM_ATTR dio0_isr_handler(void* arg);
-static void IRAM_ATTR dio2_isr_handler(void* arg);
+static void dio0_isr_handler(void* arg);
+static void dio2_isr_handler(void* arg);
 #endif
 static esp_err_t radio_spi_init(void);
 static void radio_configure_pins(void);

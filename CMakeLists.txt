@@ -1,109 +1,66 @@
+# Collect all source files recursively
+file(GLOB_RECURSE LBM_SOURCES
+    "lbm_lib/*.c"
+    "esp32_hal/*.c"
+)
+
+# Remove geolocation service files if geolocation is disabled
+if(NOT CONFIG_LBM_GEOLOCATION)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*geolocation_services.*")
+endif()
+
+# Remove Class B files if Class B is disabled
+if(NOT CONFIG_LBM_CLASS_B)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_class_b_management.*")
+endif()
+
+# Remove FUOTA-related files if FUOTA is disabled
+if(NOT CONFIG_LBM_FUOTA)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/firmware_management_protocol.*")
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/fragmented_data_block_transport.*")
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/multi_package_access.*")
+endif()
+
+# Remove multicast files if multicast is disabled
+if(NOT CONFIG_LBM_MULTICAST)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/remote_multicast_setup.*")
+endif()
+
+# Remove certification files if certification is disabled
+if(NOT CONFIG_LBM_CERTIFICATION)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/lorawan_certification.*")
+endif()
+
+# Collect all header directories recursively
+file(GLOB_RECURSE LBM_HEADERS
+    "lbm_lib/*.h"
+    "esp32_hal/*.h"
+)
+
+# Extract unique directories from header file paths
+set(LBM_INCLUDE_DIRS)
+foreach(header ${LBM_HEADERS})
+    get_filename_component(header_dir ${header} DIRECTORY)
+    list(APPEND LBM_INCLUDE_DIRS ${header_dir})
+endforeach()
+list(REMOVE_DUPLICATES LBM_INCLUDE_DIRS)
+
+# Make paths relative to component directory
+set(LBM_INCLUDE_DIRS_RELATIVE)
+foreach(include_dir ${LBM_INCLUDE_DIRS})
+    file(RELATIVE_PATH rel_path ${CMAKE_CURRENT_SOURCE_DIR} ${include_dir})
+    list(APPEND LBM_INCLUDE_DIRS_RELATIVE ${rel_path})
+endforeach()
+
+# Add current directory and common include paths
+list(APPEND LBM_INCLUDE_DIRS_RELATIVE
+    "."
+    "lbm_lib"
+)
+
 idf_component_register(
-    SRCS 
-        # Core modem files
-        "lbm_lib/smtc_modem_core/smtc_modem.c"
-        "lbm_lib/smtc_modem_core/smtc_modem_test.c"
-        
-        # Modem utilities
-        "lbm_lib/smtc_modem_core/modem_utilities/modem_core.c"
-        "lbm_lib/smtc_modem_core/modem_utilities/modem_context.c"
-        "lbm_lib/smtc_modem_core/modem_utilities/modem_event_utilities.c"
-        
-        # Modem supervisor
-        "lbm_lib/smtc_modem_core/modem_supervisor/modem_supervisor.c"
-        "lbm_lib/smtc_modem_core/modem_supervisor/modem_supervisor_light.c"
-        "lbm_lib/smtc_modem_core/modem_supervisor/modem_tx_protocol_manager.c"
-        
-        # LoRaWAN stack core
-        "lbm_lib/smtc_modem_core/lorawan_stack/lorawan_api.c"
-        "lbm_lib/smtc_modem_core/lorawan_stack/lorawan_certification.c"
-        "lbm_lib/smtc_modem_core/lorawan_stack/lorawan_send_management.c"
-        
-        # MAC layer
-        "lbm_lib/smtc_modem_core/lr1mac/src/lr1_stack_mac_layer.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/lr1mac_core.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/lr1mac_utilities.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services/smtc_duty_cycle.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services/smtc_lbt.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services/smtc_lora_cad_bt.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services/smtc_ping_slot.c"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services/smtc_multicast.c"
-        
-        # Regional abstraction layer
-        "lbm_lib/smtc_modem_core/smtc_ral/src/ral.c"
-        "lbm_lib/smtc_modem_core/smtc_ral/src/ral_lr11xx.c"
-        "lbm_lib/smtc_modem_core/smtc_ral/src/ral_sx126x.c"
-        "lbm_lib/smtc_modem_core/smtc_ral/src/ral_sx127x.c"
-        "lbm_lib/smtc_modem_core/smtc_ral/src/ral_sx128x.c"
-        
-        # RALF (RAL abstraction)
-        "lbm_lib/smtc_modem_core/smtc_ralf/src/ralf_lr11xx.c"
-        "lbm_lib/smtc_modem_core/smtc_ralf/src/ralf_sx126x.c"
-        "lbm_lib/smtc_modem_core/smtc_ralf/src/ralf_sx127x.c"
-        "lbm_lib/smtc_modem_core/smtc_ralf/src/ralf_sx128x.c"
-        
-        # Radio planner
-        "lbm_lib/smtc_modem_core/radio_planner/src/radio_planner.c"
-        "lbm_lib/smtc_modem_core/radio_planner/src/radio_planner_hal.c"
-        
-        # Cryptographic functions
-        "lbm_lib/smtc_modem_core/smtc_modem_crypto/smtc_modem_crypto.c"
-        "lbm_lib/smtc_modem_core/smtc_modem_crypto/soft_secure_element.c"
-        "lbm_lib/smtc_modem_core/smtc_modem_crypto/smtc_secure_element.c"
-        
-        # Regional parameters
-        "lbm_lib/smtc_modem_core/smtc_real/src/smtc_real.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_as_923.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_au_915.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_cn_470.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_cn_470_rp_1_0.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_eu_868.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_in_865.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_kr_920.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_ru_864.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_us_915.c"
-        "lbm_lib/smtc_modem_core/smtc_real/src/region_ww2g4.c"
-        
-        # Services (optional features)
-        "lbm_lib/smtc_modem_core/modem_services/fifo_ctrl.c"
-        
-        # Radio drivers (conditional based on selected radio)
-        "lbm_lib/smtc_modem_core/radio_drivers/sx126x_driver/src/sx126x.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/sx127x_driver/src/sx127x.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src/lr11xx_bootloader.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src/lr11xx_hal.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src/lr11xx_radio.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src/lr11xx_regmem.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src/lr11xx_system.c"
-        "lbm_lib/smtc_modem_core/radio_drivers/sx128x_driver/src/sx128x.c"
-        
-        # ESP32 HAL implementation
-        "esp32_hal/smtc_modem_hal_esp32.c"
-        "esp32_hal/radio_hal_esp32.c"
-        "esp32_hal/ral_sx126x_bsp_esp32.c"
-        "esp32_hal/ral_sx127x_bsp_esp32.c"
-        
-    INCLUDE_DIRS 
-        "lbm_lib/smtc_modem_api"
-        "lbm_lib/smtc_modem_hal"
-        "lbm_lib/smtc_modem_core"
-        "lbm_lib/smtc_modem_core/modem_utilities"
-        "lbm_lib/smtc_modem_core/modem_supervisor"
-        "lbm_lib/smtc_modem_core/lorawan_stack"
-        "lbm_lib/smtc_modem_core/lr1mac/src"
-        "lbm_lib/smtc_modem_core/lr1mac/src/services"
-        "lbm_lib/smtc_modem_core/smtc_ral/src"
-        "lbm_lib/smtc_modem_core/smtc_ralf/src"
-        "lbm_lib/smtc_modem_core/radio_planner/src"
-        "lbm_lib/smtc_modem_core/smtc_modem_crypto"
-        "lbm_lib/smtc_modem_core/smtc_real/src"
-        "lbm_lib/smtc_modem_core/modem_services"
-        "lbm_lib/smtc_modem_core/radio_drivers/sx126x_driver/src"
-        "lbm_lib/smtc_modem_core/radio_drivers/sx127x_driver/src"
-        "lbm_lib/smtc_modem_core/radio_drivers/lr11xx_driver/src"
-        "lbm_lib/smtc_modem_core/radio_drivers/sx128x_driver/src"
-        "esp32_hal"
-        "."
+    SRCS ${LBM_SOURCES}
+    INCLUDE_DIRS ${LBM_INCLUDE_DIRS_RELATIVE}
         
     REQUIRES 
         "driver"
@@ -116,10 +73,11 @@ idf_component_register(
         "log"
         "heap"
         "mbedtls"
+        "soc"
+        "hal"
+        "esp_common"
 )
 
-# Add compile definitions based on configuration
-target_compile_definitions(${COMPONENT_LIB} PRIVATE
 # Add compile definitions based on configuration
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     # HAL specific defines
@@ -128,6 +86,9 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     
     # ESP32 specific
     ESP_PLATFORM=1
+    
+    # Stack configuration
+    NUMBER_OF_STACKS=1
 )
 
 # Radio type conditional definitions
@@ -194,7 +155,7 @@ if(CONFIG_LBM_ALMANAC)
 endif()
 
 if(CONFIG_LBM_GEOLOCATION)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_SMTC_GEOLOCATION=1)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_LBM_GEOLOCATION=1)
 endif()
 
 if(CONFIG_LBM_RELAY_TX)
@@ -211,6 +172,46 @@ endif()
 
 if(CONFIG_LBM_LBT)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_LBT=1)
+endif()
+
+if(CONFIG_LBM_CLASS_B)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_CLASS_B=1)
+endif()
+
+if(CONFIG_LBM_CLASS_C)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_CLASS_C=1)
+endif()
+
+if(CONFIG_LBM_MULTICAST)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE SMTC_MULTICAST=1)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE SMTC_MULTICAST_MAX_SESSIONS=${CONFIG_LBM_MULTICAST_MAX_SESSIONS})
+endif()
+
+if(CONFIG_LBM_FUOTA)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ENABLE_FUOTA_FULL=1)
+    if(CONFIG_LBM_FUOTA_FMP)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE ENABLE_FUOTA_FMP=1)
+    endif()
+    if(CONFIG_LBM_FUOTA_MPA)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE ENABLE_FUOTA_MPA=1)
+    endif()
+endif()
+
+if(CONFIG_LBM_CERTIFICATION)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ENABLE_LORAWAN_CERTIFICATION=1)
+endif()
+
+if(CONFIG_LBM_TEST_MODE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ENABLE_TEST_MODE=1)
+endif()
+
+# LoRaWAN Regional Parameters version conditional definitions
+if(CONFIG_LBM_RP2_103)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE RP2_103=1)
+endif()
+
+if(CONFIG_LBM_RP2_104)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE RP2_104=1)
 endif()
 
 # SX126X specific configuration options
@@ -307,6 +308,16 @@ elseif(CONFIG_LBM_SX127X_RAMP_12_US)
 elseif(CONFIG_LBM_SX127X_RAMP_10_US)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE SX127X_PA_RAMP_TIME=15)
 endif()
+
+# Memory and timing configuration
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    FIFO_LORAWAN_SIZE=${CONFIG_LBM_FIFO_LORAWAN_SIZE}
+    MODEM_MIN_RANDOM_DELAY_MS=${CONFIG_LBM_MIN_RANDOM_DELAY_MS}
+    MODEM_MAX_RANDOM_DELAY_MS=${CONFIG_LBM_MAX_RANDOM_DELAY_MS}
+    MODEM_INITIAL_JOIN_DELAY_S=${CONFIG_LBM_INITIAL_JOIN_DELAY_S}
+    MODEM_MAX_JOIN_DELAY_S=${CONFIG_LBM_MAX_JOIN_DELAY_S}
+    MODEM_WATCHDOG_TIMEOUT_MS=${CONFIG_LBM_WATCHDOG_TIMEOUT_MS}
+)
 
 # Add compiler flags for optimization and warnings
 target_compile_options(${COMPONENT_LIB} PRIVATE

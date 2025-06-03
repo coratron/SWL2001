@@ -2,7 +2,7 @@ menu "LoRa Basics Modem Configuration"
 
     choice LBM_RADIO_TYPE
         prompt "Radio Type"
-        default LBM_RADIO_SX126X
+        default LBM_RADIO_SX127X
         help
             Select the LoRa radio chip type
 
@@ -114,6 +114,108 @@ menu "LoRa Basics Modem Configuration"
             default y
             help
                 Enable Listen Before Talk functionality
+                
+        config LBM_CLASS_B
+            bool "Enable LoRaWAN Class B"
+            default n
+            help
+                Enable LoRaWAN Class B functionality for scheduled downlinks and beacon reception
+                
+        config LBM_CLASS_C
+            bool "Enable LoRaWAN Class C"
+            default n
+            help
+                Enable LoRaWAN Class C functionality for continuous reception
+                
+        config LBM_MULTICAST
+            bool "Enable Multicast Support"
+            default n
+            help
+                Enable multicast functionality for group communications
+                
+        config LBM_MULTICAST_MAX_SESSIONS
+            int "Maximum Multicast Sessions"
+            depends on LBM_MULTICAST
+            default 4
+            range 1 16
+            help
+                Maximum number of concurrent multicast sessions
+                
+        config LBM_FUOTA
+            bool "Enable FUOTA (Firmware Update Over The Air)"
+            default n
+            help
+                Enable FUOTA functionality for remote firmware updates
+                
+        config LBM_FUOTA_FMP
+            bool "Enable FUOTA Fragmented Data Block Transport"
+            depends on LBM_FUOTA
+            default y
+            help
+                Enable Fragmented Data Block Transport for FUOTA
+                
+        config LBM_FUOTA_MPA
+            bool "Enable FUOTA Multicast Package Access"
+            depends on LBM_FUOTA
+            default y
+            help
+                Enable Multicast Package Access for FUOTA
+                
+        config LBM_CERTIFICATION
+            bool "Enable LoRaWAN Certification Features"
+            default n
+            help
+                Enable LoRaWAN certification test features
+                
+        config LBM_TEST_MODE
+            bool "Enable Test Mode"
+            default n
+            help
+                Enable test mode functionality for development and debugging
+    endmenu
+
+    menu "Memory and Timing Configuration"
+        config LBM_FIFO_LORAWAN_SIZE
+            int "LoRaWAN FIFO Size"
+            default 256
+            range 64 1024
+            help
+                Size of the FIFO buffer for internal events
+                
+        config LBM_MIN_RANDOM_DELAY_MS
+            int "Minimum Random Delay (ms)"
+            default 100
+            range 0 1000
+            help
+                Minimum random delay for transmissions in milliseconds
+                
+        config LBM_MAX_RANDOM_DELAY_MS
+            int "Maximum Random Delay (ms)"
+            default 2000
+            range 100 10000
+            help
+                Maximum random delay for transmissions in milliseconds
+                
+        config LBM_INITIAL_JOIN_DELAY_S
+            int "Initial Join Delay (s)"
+            default 5
+            range 1 60
+            help
+                Initial delay before join procedure in seconds
+                
+        config LBM_MAX_JOIN_DELAY_S
+            int "Maximum Join Delay (s)"
+            default 3600
+            range 60 86400
+            help
+                Maximum delay between join attempts in seconds
+                
+        config LBM_WATCHDOG_TIMEOUT_MS
+            int "Watchdog Timeout (ms)"
+            default 30000
+            range 1000 300000
+            help
+                Watchdog timeout in milliseconds
     endmenu
 
     menu "Hardware Configuration"
@@ -345,5 +447,25 @@ menu "LoRa Basics Modem Configuration"
             help
                 Debug trace level (0=None, 1=Error, 2=Warning, 3=Info, 4=Debug, 5=Verbose)
     endmenu
+
+    choice LBM_REGIONAL_PARAMETERS_VERSION
+        prompt "LoRaWAN Regional Parameters Version"
+        default LBM_RP2_103
+        help
+            Select the LoRaWAN Regional Parameters version to use.
+            RP2-1.0.3 is the current standard version.
+            RP2-1.0.4 includes additional features and updates.
+
+        config LBM_RP2_103
+            bool "RP2-1.0.3"
+            help
+                Use LoRaWAN Regional Parameters version 2-1.0.3
+
+        config LBM_RP2_104
+            bool "RP2-1.0.4"
+            help
+                Use LoRaWAN Regional Parameters version 2-1.0.4
+
+    endchoice
 
 endmenu

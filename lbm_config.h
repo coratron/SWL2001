@@ -146,19 +146,33 @@ extern "C" {
 #define NUMBER_OF_STACKS 1
 
 // Enable multicast support
+#ifdef CONFIG_LBM_MULTICAST
 #define SMTC_MULTICAST
 
 // Number of multicast sessions
-#define SMTC_MULTICAST_MAX_SESSIONS 4
+#define SMTC_MULTICAST_MAX_SESSIONS CONFIG_LBM_MULTICAST_MAX_SESSIONS
+#endif
 
 // FUOTA (Firmware Update Over The Air) support
+#ifdef CONFIG_LBM_FUOTA
 #define ENABLE_FUOTA_FULL
-#define ENABLE_FUOTA_FMP
-#define ENABLE_FUOTA_MPA
 
-// Class B and Class C support
+#ifdef CONFIG_LBM_FUOTA_FMP
+#define ENABLE_FUOTA_FMP
+#endif
+
+#ifdef CONFIG_LBM_FUOTA_MPA
+#define ENABLE_FUOTA_MPA
+#endif
+#endif
+
+#ifdef CONFIG_LBM_CLASS_B
 #define ADD_CLASS_B
+#endif
+
+#ifdef CONFIG_LBM_CLASS_C
 #define ADD_CLASS_C
+#endif
 
 // Default stack configuration
 #define STACK_ID_0 0
@@ -168,11 +182,8 @@ extern "C" {
  * --- MEMORY CONFIGURATION ---------------------------------------------------
  */
 
-// Size of the internal buffer for uplink data
-#define SMTC_MODEM_MAX_LORAWAN_PAYLOAD_LENGTH 255
-
 // Size of the fifo buffer for internal events
-#define FIFO_LORAWAN_SIZE 256
+#define FIFO_LORAWAN_SIZE CONFIG_LBM_FIFO_LORAWAN_SIZE
 
 /*
  * -----------------------------------------------------------------------------
@@ -180,15 +191,15 @@ extern "C" {
  */
 
 // Default random delay range for transmissions (in ms)
-#define MODEM_MIN_RANDOM_DELAY_MS 100
-#define MODEM_MAX_RANDOM_DELAY_MS 2000
+#define MODEM_MIN_RANDOM_DELAY_MS CONFIG_LBM_MIN_RANDOM_DELAY_MS
+#define MODEM_MAX_RANDOM_DELAY_MS CONFIG_LBM_MAX_RANDOM_DELAY_MS
 
 // Default join procedure settings
-#define MODEM_INITIAL_JOIN_DELAY_S 5
-#define MODEM_MAX_JOIN_DELAY_S 3600
+#define MODEM_INITIAL_JOIN_DELAY_S CONFIG_LBM_INITIAL_JOIN_DELAY_S
+#define MODEM_MAX_JOIN_DELAY_S CONFIG_LBM_MAX_JOIN_DELAY_S
 
 // Watchdog timeout
-#define MODEM_WATCHDOG_TIMEOUT_MS 30000
+#define MODEM_WATCHDOG_TIMEOUT_MS CONFIG_LBM_WATCHDOG_TIMEOUT_MS
 
 /*
  * -----------------------------------------------------------------------------
@@ -218,10 +229,14 @@ extern "C" {
  */
 
 // Enable LoRaWAN certification features
+#ifdef CONFIG_LBM_CERTIFICATION
 #define ENABLE_LORAWAN_CERTIFICATION
+#endif
 
 // Enable test mode
+#ifdef CONFIG_LBM_TEST_MODE
 #define ENABLE_TEST_MODE
+#endif
 
 #ifdef __cplusplus
 }
