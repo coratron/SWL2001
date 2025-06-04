@@ -110,6 +110,7 @@ typedef struct {
 
 static radio_hal_context_t radio_hal_ctx = {0};
 static SemaphoreHandle_t spi_mutex = NULL;
+static bool isr_service_attempted = false;
 
 /*
  * -----------------------------------------------------------------------------
@@ -323,8 +324,14 @@ static void radio_configure_pins(void)
         io_conf.intr_type = GPIO_INTR_POSEDGE;
         ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-        // Install ISR service and handler
-        ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
+        // Install ISR service only if not already attempted
+        if (!isr_service_attempted) {
+            esp_err_t isr_ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+            isr_service_attempted = true;
+            if (isr_ret != ESP_OK && isr_ret != ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG, "GPIO ISR service installation failed: %s", esp_err_to_name(isr_ret));
+            }
+        }
         ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO1_PIN, dio1_isr_handler, NULL));
     }
 

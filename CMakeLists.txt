@@ -9,6 +9,16 @@ if(NOT CONFIG_LBM_GEOLOCATION)
     list(FILTER LBM_SOURCES EXCLUDE REGEX ".*geolocation_services.*")
 endif()
 
+# Remove stream service files if stream is disabled
+if(NOT CONFIG_LBM_STREAM)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*stream_packages.*")
+endif()
+
+# Remove device management files if device management is disabled
+if(NOT CONFIG_LBM_DEVICE_MANAGEMENT)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*cloud_dm_package.*")
+endif()
+
 # Remove Class B files if Class B is disabled
 if(NOT CONFIG_LBM_CLASS_B)
     list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_class_b_management.*")

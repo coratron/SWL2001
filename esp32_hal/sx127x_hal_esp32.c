@@ -233,7 +233,22 @@ static void rx_timer_callback(void* arg)
 static void dio_isr_handler(void* arg)
 {
     const sx127x_t* radio = (const sx127x_t*)arg;
+    
+    // For SX127x, we need to handle multiple DIO interrupts
+    // Check which DIO pin triggered and call appropriate handler
+    
+    // DIO0 is typically used for TxDone/RxDone
     if (radio && radio->dio_0_irq_handler) {
-        radio->dio_0_irq_handler((void*)radio->hal_context);
+        radio->dio_0_irq_handler((void*)radio);
+    }
+    
+    // DIO1 is typically used for RxTimeout/FhssChangeChannel
+    if (radio && radio->dio_1_irq_handler) {
+        radio->dio_1_irq_handler((void*)radio);
+    }
+    
+    // DIO2 is typically used for FhssChangeChannel (in some modes)
+    if (radio && radio->dio_2_irq_handler) {
+        radio->dio_2_irq_handler((void*)radio);
     }
 }
