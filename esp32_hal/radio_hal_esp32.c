@@ -54,8 +54,12 @@
 #define CONFIG_LBM_RADIO_BUSY_PIN 32
 #endif
 
+#ifndef CONFIG_LBM_RADIO_DIO0_PIN
+#define CONFIG_LBM_RADIO_DIO0_PIN 12
+#endif
+
 #ifndef CONFIG_LBM_RADIO_DIO1_PIN
-#define CONFIG_LBM_RADIO_DIO1_PIN 33
+#define CONFIG_LBM_RADIO_DIO1_PIN 13
 #endif
 
 #ifndef CONFIG_LBM_RADIO_DIO2_PIN
@@ -305,6 +309,16 @@ static void radio_configure_pins(void)
 
 #ifdef CONFIG_LBM_RADIO_SX127X
     // Configure DIO0 pin for SX127X (additional interrupt)
+#if defined(CONFIG_LBM_RADIO_DIO0_PIN) && CONFIG_LBM_RADIO_DIO0_PIN >= 0
+    io_conf.pin_bit_mask = (1ULL << CONFIG_LBM_RADIO_DIO0_PIN);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_POSEDGE;
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO0_PIN, dio0_isr_handler, NULL));
+#endif
+    // Configure DIO0 pin for SX127X (additional interrupt)
 #if defined(CONFIG_LBM_RADIO_DIO2_PIN) && CONFIG_LBM_RADIO_DIO2_PIN >= 0
     io_conf.pin_bit_mask = (1ULL << CONFIG_LBM_RADIO_DIO2_PIN);
     io_conf.mode = GPIO_MODE_INPUT;
@@ -312,7 +326,7 @@ static void radio_configure_pins(void)
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.intr_type = GPIO_INTR_POSEDGE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO2_PIN, dio0_isr_handler, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO2_PIN, dio2_isr_handler, NULL));
 #endif
 
     // Configure DIO2 pin for SX127X (additional interrupt)  
@@ -323,7 +337,7 @@ static void radio_configure_pins(void)
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.intr_type = GPIO_INTR_POSEDGE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO3_PIN, dio2_isr_handler, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(CONFIG_LBM_RADIO_DIO3_PIN, dio3_isr_handler, NULL));
 #endif
 #endif
 }
@@ -340,6 +354,14 @@ static void IRAM_ATTR dio0_isr_handler(void* arg)
 static void IRAM_ATTR dio2_isr_handler(void* arg)
 {
     // DIO2 interrupt handler for SX127X
+    if (radio_hal_ctx.irq_callback != NULL) {
+        radio_hal_ctx.irq_callback(radio_hal_ctx.irq_context);
+    }
+}
+
+static void IRAM_ATTR dio3_isr_handler(void* arg)
+{
+    // DIO3 interrupt handler for SX127X
     if (radio_hal_ctx.irq_callback != NULL) {
         radio_hal_ctx.irq_callback(radio_hal_ctx.irq_context);
     }

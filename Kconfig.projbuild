@@ -233,7 +233,7 @@ menu "LoRa Basics Modem Configuration"
                 
         config LBM_RADIO_RESET_PIN
             int "Radio Reset Pin"
-            default 14
+            default -1
             help
                 GPIO pin for radio reset
                 
@@ -242,10 +242,16 @@ menu "LoRa Basics Modem Configuration"
             default 32
             help
                 GPIO pin for radio busy signal
-                
+
+        config LBM_RADIO_DIO0_PIN
+            int "Radio DIO0 Pin"
+            default 12
+            help
+                GPIO pin for radio DIO1 interrupt
+                        
         config LBM_RADIO_DIO1_PIN
             int "Radio DIO1 Pin"
-            default 33
+            default 13
             help
                 GPIO pin for radio DIO1 interrupt
                 
