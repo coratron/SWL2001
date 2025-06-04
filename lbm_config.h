@@ -29,19 +29,27 @@ extern "C" {
 
 // Radio type selection
 #ifdef CONFIG_LBM_RADIO_SX126X
+#ifndef SX126X
 #define SX126X
+#endif
 #endif
 
 #ifdef CONFIG_LBM_RADIO_SX127X
+#ifndef SX127X
 #define SX127X
+#endif
 #endif
 
 #ifdef CONFIG_LBM_RADIO_LR11XX
+#ifndef LR11XX
 #define LR11XX
+#endif
 #endif
 
 #ifdef CONFIG_LBM_RADIO_SX128X
+#ifndef SX128X
 #define SX128X
+#endif
 #endif
 
 /*
@@ -50,35 +58,51 @@ extern "C" {
  */
 
 #ifdef CONFIG_LBM_REGION_EU_868
+#ifndef REGION_EU_868
 #define REGION_EU_868
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_US_915
+#ifndef REGION_US_915
 #define REGION_US_915
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_AS_923
+#ifndef REGION_AS_923
 #define REGION_AS_923
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_AU_915
+#ifndef REGION_AU_915
 #define REGION_AU_915
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_CN_470
+#ifndef REGION_CN_470
 #define REGION_CN_470
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_IN_865
+#ifndef REGION_IN_865
 #define REGION_IN_865
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_KR_920
+#ifndef REGION_KR_920
 #define REGION_KR_920
+#endif
 #endif
 
 #ifdef CONFIG_LBM_REGION_RU_864
+#ifndef REGION_RU_864
 #define REGION_RU_864
+#endif
 #endif
 
 /*
@@ -87,37 +111,57 @@ extern "C" {
  */
 
 #ifdef CONFIG_LBM_STREAM
+#ifndef ADD_SMTC_STREAM
 #define ADD_SMTC_STREAM
+#endif
 #endif
 
 #ifdef CONFIG_LBM_DEVICE_MANAGEMENT
+#ifndef ADD_SMTC_CLOUD_DEVICE_MANAGEMENT
 #define ADD_SMTC_CLOUD_DEVICE_MANAGEMENT
+#endif
 #endif
 
 #ifdef CONFIG_LBM_ALMANAC
+#ifndef ADD_ALMANAC
 #define ADD_ALMANAC
+#endif
 #endif
 
 #ifdef CONFIG_LBM_GEOLOCATION
+#ifndef ADD_GEOLOCATION
 #define ADD_GEOLOCATION
+#endif
+#ifndef ADD_GNSS
 #define ADD_GNSS
+#endif
+#ifndef ADD_WIFI
 #define ADD_WIFI
+#endif
 #endif
 
 #ifdef CONFIG_LBM_RELAY_TX
+#ifndef ADD_RELAY_TX
 #define ADD_RELAY_TX
+#endif
 #endif
 
 #ifdef CONFIG_LBM_RELAY_RX
+#ifndef ADD_RELAY_RX
 #define ADD_RELAY_RX
+#endif
 #endif
 
 #ifdef CONFIG_LBM_CSMA
+#ifndef ADD_CSMA
 #define ADD_CSMA
+#endif
 #endif
 
 #ifdef CONFIG_LBM_LBT
+#ifndef ADD_LBT
 #define ADD_LBT
+#endif
 #endif
 
 /*
@@ -183,7 +227,6 @@ extern "C" {
  */
 
 // Size of the fifo buffer for internal events
-#define FIFO_LORAWAN_SIZE CONFIG_LBM_FIFO_LORAWAN_SIZE
 
 /*
  * -----------------------------------------------------------------------------
@@ -191,15 +234,25 @@ extern "C" {
  */
 
 // Default random delay range for transmissions (in ms)
+#ifndef MODEM_MIN_RANDOM_DELAY_MS
 #define MODEM_MIN_RANDOM_DELAY_MS CONFIG_LBM_MIN_RANDOM_DELAY_MS
+#endif
+#ifndef MODEM_MAX_RANDOM_DELAY_MS
 #define MODEM_MAX_RANDOM_DELAY_MS CONFIG_LBM_MAX_RANDOM_DELAY_MS
+#endif
 
 // Default join procedure settings
+#ifndef MODEM_INITIAL_JOIN_DELAY_S
 #define MODEM_INITIAL_JOIN_DELAY_S CONFIG_LBM_INITIAL_JOIN_DELAY_S
+#endif
+#ifndef MODEM_MAX_JOIN_DELAY_S
 #define MODEM_MAX_JOIN_DELAY_S CONFIG_LBM_MAX_JOIN_DELAY_S
+#endif
 
 // Watchdog timeout
+#ifndef MODEM_WATCHDOG_TIMEOUT_MS
 #define MODEM_WATCHDOG_TIMEOUT_MS CONFIG_LBM_WATCHDOG_TIMEOUT_MS
+#endif
 
 /*
  * -----------------------------------------------------------------------------
@@ -230,12 +283,16 @@ extern "C" {
 
 // Enable LoRaWAN certification features
 #ifdef CONFIG_LBM_CERTIFICATION
+#ifndef ENABLE_LORAWAN_CERTIFICATION
 #define ENABLE_LORAWAN_CERTIFICATION
+#endif
 #endif
 
 // Enable test mode
 #ifdef CONFIG_LBM_TEST_MODE
+#ifndef ENABLE_TEST_MODE
 #define ENABLE_TEST_MODE
+#endif
 #endif
 
 #ifdef __cplusplus

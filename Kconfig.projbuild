@@ -19,13 +19,13 @@ menu "LoRa Basics Modem Configuration"
     menu "LoRaWAN Regions"
         config LBM_REGION_EU_868
             bool "EU868"
-            default y
+            default n
             help
                 Enable EU868 regional parameters
                 
         config LBM_REGION_US_915
             bool "US915"
-            default y
+            default n
             help
                 Enable US915 regional parameters
                 
@@ -37,7 +37,7 @@ menu "LoRa Basics Modem Configuration"
                 
         config LBM_REGION_AU_915
             bool "AU915"
-            default n
+            default y
             help
                 Enable AU915 regional parameters
                 
@@ -64,6 +64,12 @@ menu "LoRa Basics Modem Configuration"
             default n
             help
                 Enable RU864 regional parameters
+
+        config LBM_REGION_WW2G4
+            bool "WW2G4 (2.4GHz ISM)"
+            default n
+            help
+                Enable WW2G4 (2.4GHz ISM band) regional parameters
     endmenu
 
     menu "Optional Features"
@@ -175,13 +181,6 @@ menu "LoRa Basics Modem Configuration"
     endmenu
 
     menu "Memory and Timing Configuration"
-        config LBM_FIFO_LORAWAN_SIZE
-            int "LoRaWAN FIFO Size"
-            default 256
-            range 64 1024
-            help
-                Size of the FIFO buffer for internal events
-                
         config LBM_MIN_RANDOM_DELAY_MS
             int "Minimum Random Delay (ms)"
             default 100
@@ -374,6 +373,19 @@ menu "LoRa Basics Modem Configuration"
 
     menu "SX127X Configuration"
         depends on LBM_RADIO_SX127X
+        
+        choice LBM_SX127X_CHIP_TYPE
+            prompt "SX127X Chip Type"
+            default LBM_SX127X_CHIP_SX1276
+            help
+                Select the specific SX127X chip type
+                
+            config LBM_SX127X_CHIP_SX1272
+                bool "SX1272"
+                
+            config LBM_SX127X_CHIP_SX1276
+                bool "SX1276"
+        endchoice
         
         config LBM_SX127X_BOARD_TYPE_MAS
             bool "High Power Board (MAS)"

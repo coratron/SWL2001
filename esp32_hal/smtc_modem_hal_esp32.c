@@ -1,11 +1,9 @@
-/*!
- * \file      smtc_modem_hal_esp32.c
+/**
+ * @file      smtc_modem_hal_esp32.c
  *
- * \brief     ESP32 Hardware Abstraction Layer implementation for LoRa Basics Modem
+ * @brief     ESP32 implementation of SMTC Modem HAL functions
  *
- * \copyright Copyright (c) 2023 The Things Industries B.V.
- *
- * SPDX-License-Identifier: MIT
+ * Copyright (c) 2024
  */
 
 /*
@@ -13,48 +11,64 @@
  * --- DEPENDENCIES ------------------------------------------------------------
  */
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdarg.h>
-
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "esp_system.h"
-#include "esp_random.h"
-#include "esp_sleep.h"
-#include "esp_task_wdt.h"
-#include "nvs_flash.h"
-#include "nvs.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "driver/gpio.h"
-#include "driver/spi_master.h"
-#include "driver/rtc_io.h"
+#include <stdint.h>   // C99 types
+#include <stdbool.h>  // bool type
+#include <stdarg.h>   // va_list
+#include <string.h>   // memcpy, memset
 
 #include "smtc_modem_hal.h"
 
+#include "esp_log.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "esp_task_wdt.h"
+#include "esp_random.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/timers.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "soc/rtc.h"
+
 /*
  * -----------------------------------------------------------------------------
- * --- PRIVATE MACROS ----------------------------------------------------------
+ * --- PRIVATE MACROS-----------------------------------------------------------
  */
-
-#define TAG "LBM_HAL"
 
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE CONSTANTS -------------------------------------------------------
  */
 
-#define NVS_NAMESPACE "lbm_storage"
+#define NVS_NAMESPACE_MODEM         "lbm_modem"
+#define NVS_NAMESPACE_LORAWAN       "lbm_lorawan"
+#define NVS_NAMESPACE_FUOTA         "lbm_fuota"
+#define NVS_NAMESPACE_SECURE_ELEM   "lbm_se"
+#define NVS_NAMESPACE_STORE_FWD     "lbm_sf"
+#define NVS_NAMESPACE_CRASHLOG      "lbm_crash"
+
+#define NVS_NAMESPACE               "lbm_hal"  // Default namespace
+
+#define FLASH_PAGE_SIZE             4096
+#define STORE_AND_FORWARD_PAGES     3
+
+static const char* TAG = "smtc_modem_hal";
 #define MAX_NVS_KEY_LENGTH 15
 
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE TYPES -----------------------------------------------------------
  */
+
+/**
+ * @brief HAL status type
+ */
+typedef enum smtc_modem_hal_status_e
+{
+    SMTC_MODEM_HAL_STATUS_OK = 0,
+    SMTC_MODEM_HAL_STATUS_ERROR,
+} smtc_modem_hal_status_t;
 
 typedef struct
 {
@@ -421,10 +435,111 @@ uint8_t smtc_modem_hal_get_voltage(void)
     return 165; // 3.3V default
 }
 
+uint16_t smtc_modem_hal_get_voltage_mv(void)
+{
+    // Return voltage in millivolts
+    // For ESP32, we can use ADC to read voltage
+    // This is a basic implementation - adjust based on your voltage divider circuit
+    return 3300; // 3.3V default in millivolts
+}
+
+void smtc_modem_hal_set_ant_switch(bool is_tx_on)
+{
+    // Set antenna switch for TX/RX
+    // Implementation depends on your board's antenna switch design
+    // This is typically controlled by GPIO pins
+    
+    // Example implementation (adjust GPIO pins based on your board):
+    // GPIO pin for TX/RX control (set via Kconfig or define)
+    #ifndef CONFIG_LBM_ANT_SWITCH_PIN
+    #define CONFIG_LBM_ANT_SWITCH_PIN -1  // Disabled by default
+    #endif
+    
+    if (CONFIG_LBM_ANT_SWITCH_PIN >= 0) {
+        gpio_set_level(CONFIG_LBM_ANT_SWITCH_PIN, is_tx_on ? 1 : 0);
+    }
+}
+
 int8_t smtc_modem_hal_get_board_delay_ms(void)
 {
     // Return board-specific delay compensation
     return 1; // Typical value for ESP32
+}
+
+/* ------------ FUOTA management ------------*/
+uint32_t smtc_modem_hal_fuota_get_allocated_memory(void)
+{
+    // Return allocated memory for FUOTA in bytes
+    // This depends on your application's available memory
+    return 64 * 1024; // 64KB default
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_fuota_store(uint32_t addr, const uint8_t* data, uint32_t size)
+{
+    // Store FUOTA data to flash
+    // Implementation depends on your flash partitioning scheme
+    ESP_LOGW(TAG, "FUOTA store not implemented - addr: 0x%08lx, size: %lu", addr, size);
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_fuota_read(uint32_t addr, uint8_t* data, uint32_t size)
+{
+    // Read FUOTA data from flash
+    // Implementation depends on your flash partitioning scheme  
+    ESP_LOGW(TAG, "FUOTA read not implemented - addr: 0x%08lx, size: %lu", addr, size);
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_fuota_start_install(void)
+{
+    // Start FUOTA installation process
+    ESP_LOGW(TAG, "FUOTA install not implemented");
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+/* ------------ Store and Forward management ------------*/
+smtc_modem_hal_status_t smtc_modem_hal_store_and_forward_flash_clear_pending_data(void)
+{
+    // Clear pending store and forward data
+    ESP_LOGW(TAG, "Store and forward clear not implemented");
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+uint16_t smtc_modem_hal_store_and_forward_get_number_of_pages(void)
+{
+    // Return number of pages available for store and forward
+    return STORE_AND_FORWARD_PAGES;
+}
+
+uint16_t smtc_modem_hal_store_and_forward_get_page_size(void)
+{
+    // Return page size for store and forward
+    return FLASH_PAGE_SIZE;
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_store_and_forward_flash_erase_page(uint16_t page_id)
+{
+    // Erase a page for store and forward
+    ESP_LOGW(TAG, "Store and forward erase page %d not implemented", page_id);
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_store_and_forward_flash_write(uint16_t page_id, uint16_t offset, 
+                                                                     const uint8_t* data, uint16_t size)
+{
+    // Write data to store and forward flash
+    ESP_LOGW(TAG, "Store and forward write not implemented - page: %d, offset: %d, size: %d", 
+             page_id, offset, size);
+    return SMTC_MODEM_HAL_STATUS_OK;
+}
+
+smtc_modem_hal_status_t smtc_modem_hal_store_and_forward_flash_read(uint16_t page_id, uint16_t offset,
+                                                                    uint8_t* data, uint16_t size)
+{
+    // Read data from store and forward flash
+    ESP_LOGW(TAG, "Store and forward read not implemented - page: %d, offset: %d, size: %d",
+             page_id, offset, size);
+    return SMTC_MODEM_HAL_STATUS_OK;
 }
 
 /* ------------ Trace management ------------*/
@@ -434,6 +549,14 @@ void smtc_modem_hal_print_trace(const char* fmt, ...)
     va_start(args, fmt);
     esp_log_writev(ESP_LOG_INFO, TAG, fmt, args);
     va_end(args);
+}
+
+/* ------------ User LBM IRQ management ------------*/
+void smtc_modem_hal_user_lbm_irq(void)
+{
+    // This function should be called from the radio planner when an IRQ occurs
+    // In this ESP32 implementation, it's handled by the timer and radio IRQ callbacks
+    // No additional implementation needed here as the interrupts are handled directly
 }
 
 /*

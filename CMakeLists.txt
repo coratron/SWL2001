@@ -31,6 +31,78 @@ if(NOT CONFIG_LBM_CERTIFICATION)
     list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lorawan_packages/lorawan_certification.*")
 endif()
 
+# Remove relay files based on configuration
+if(NOT CONFIG_LBM_RELAY_TX)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*relay/relay_tx/.*")
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*relay_service/lorawan_relay_tx_service.*")
+endif()
+if(NOT CONFIG_LBM_RELAY_RX)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*relay/relay_rx/.*")
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*relay_service/lorawan_relay_rx_service.*")
+endif()
+
+# Remove regional files based on configuration
+if(NOT CONFIG_LBM_REGION_EU_868)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_eu_868.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_US_915)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_us_915.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_AS_923)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_as_923.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_AU_915)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_au_915.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_CN_470)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_cn_470.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_IN_865)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_in_865.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_KR_920)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_kr_920.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_RU_864)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_ru_864.*")
+endif()
+
+if(NOT CONFIG_LBM_REGION_WW2G4)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*region_ww2g4.*")
+endif()
+
+# Remove almanac files if not enabled
+if(NOT CONFIG_LBM_ALMANAC)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*almanac.*")
+endif()
+
+# Remove radio-specific files based on selected radio
+if(NOT CONFIG_LBM_RADIO_LR11XX)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*lr11xx.*")
+endif()
+
+if(NOT CONFIG_LBM_RADIO_SX126X)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*sx126x.*")
+endif()
+
+if(NOT CONFIG_LBM_RADIO_SX127X)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*sx127x.*")
+endif()
+
+if(NOT CONFIG_LBM_RADIO_SX128X)
+    list(FILTER LBM_SOURCES EXCLUDE REGEX ".*sx128x.*")
+endif()
+
+# Always exclude LLCC68 files since we don't have that radio driver
+list(FILTER LBM_SOURCES EXCLUDE REGEX ".*llcc68.*")
+
 # Collect all header directories recursively
 file(GLOB_RECURSE LBM_HEADERS
     "lbm_lib/*.h"
@@ -98,6 +170,13 @@ endif()
 
 if(CONFIG_LBM_RADIO_SX127X)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE SX127X=1)
+    
+    # Define specific SX127X chip type
+    if(CONFIG_LBM_SX127X_CHIP_SX1272)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE SX1272=1)
+    elseif(CONFIG_LBM_SX127X_CHIP_SX1276)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE SX1276=1)
+    endif()
 endif()
 
 if(CONFIG_LBM_RADIO_LR11XX)
@@ -141,6 +220,10 @@ if(CONFIG_LBM_REGION_RU_864)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE REGION_RU_864=1)
 endif()
 
+if(CONFIG_LBM_REGION_WW2G4)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE REGION_WW2G4=1)
+endif()
+
 # Optional features conditional definitions
 if(CONFIG_LBM_STREAM)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_SMTC_STREAM=1)
@@ -159,11 +242,11 @@ if(CONFIG_LBM_GEOLOCATION)
 endif()
 
 if(CONFIG_LBM_RELAY_TX)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_SMTC_RELAY_TX=1)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_RELAY_TX=1)
 endif()
 
 if(CONFIG_LBM_RELAY_RX)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_SMTC_RELAY_RX=1)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_RELAY_RX=1)
 endif()
 
 if(CONFIG_LBM_CSMA)
@@ -311,7 +394,6 @@ endif()
 
 # Memory and timing configuration
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
-    FIFO_LORAWAN_SIZE=${CONFIG_LBM_FIFO_LORAWAN_SIZE}
     MODEM_MIN_RANDOM_DELAY_MS=${CONFIG_LBM_MIN_RANDOM_DELAY_MS}
     MODEM_MAX_RANDOM_DELAY_MS=${CONFIG_LBM_MAX_RANDOM_DELAY_MS}
     MODEM_INITIAL_JOIN_DELAY_S=${CONFIG_LBM_INITIAL_JOIN_DELAY_S}
