@@ -231,7 +231,7 @@ void store_and_forward_services_init( uint8_t* service_id, uint8_t task_id,
     ctx->initialized         = true;
     ctx->sending_periodicity = 0;
 
-    fifo_ctrl_init( &ctx->fifo_ctrl_obj, &ctx->fifo_buffer, STORE_AND_FORWARD_FIFO_SIZE );
+    fifo_ctrl_init( &ctx->fifo_ctrl_obj, ctx->fifo_buffer, STORE_AND_FORWARD_FIFO_SIZE );
 }
 
 void store_and_forward_services_enable( uint8_t stack_id, bool enabled )
