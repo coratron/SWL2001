@@ -730,42 +730,50 @@ smtc_modem_return_code_t smtc_modem_get_available_datarates( uint8_t stack_id, u
     return return_code;
 }
 
-smtc_modem_return_code_t smtc_modem_join_network( uint8_t stack_id )
+smtc_modem_return_code_t smtc_modem_join_network(uint8_t stack_id)
 {
-    RETURN_BUSY_IF_TEST_MODE( );
-    SMTC_MODEM_HAL_TRACE_INFO( "%s\n", __func__ );
-    smtc_modem_return_code_t return_code = SMTC_MODEM_RC_OK;
+    RETURN_BUSY_IF_TEST_MODE();
+    SMTC_MODEM_HAL_TRACE_INFO("%s: Starting join process\n", __func__);
 
-    smtc_modem_status_mask_t status_mask = modem_get_status( stack_id );
-    if( ( ( status_mask & SMTC_MODEM_STATUS_JOINED ) == SMTC_MODEM_STATUS_JOINED ) ||
-        ( ( status_mask & SMTC_MODEM_STATUS_JOINING ) == SMTC_MODEM_STATUS_JOINING ) )
+    // Get current modem status to check if join is allowed
+    smtc_modem_status_mask_t status_mask = modem_get_status(stack_id);
+
+    // Check if device is already joined or currently joining
+    if((status_mask & SMTC_MODEM_STATUS_JOINED) || (status_mask & SMTC_MODEM_STATUS_JOINING))
     {
-        // the modem have to be leave from the network to join
-        return_code = SMTC_MODEM_RC_BUSY;
-        SMTC_MODEM_HAL_TRACE_WARNING( "%s call but the device is already join\n", __func__ );
+        SMTC_MODEM_HAL_TRACE_WARNING("%s: Device is already %s (status: 0x%02X)\n",
+                                     __func__,
+                                     (status_mask & SMTC_MODEM_STATUS_JOINED) ? "joined" : "joining",
+                                     status_mask);
+        return SMTC_MODEM_RC_BUSY;
     }
-    else if( ( ( status_mask & SMTC_MODEM_STATUS_SUSPEND ) == SMTC_MODEM_STATUS_SUSPEND ) ||
-             ( ( status_mask & SMTC_MODEM_STATUS_MUTE ) == SMTC_MODEM_STATUS_MUTE ) )
+
+    // Check if device is in a state that prevents joining
+    if((status_mask & SMTC_MODEM_STATUS_SUSPEND) || (status_mask & SMTC_MODEM_STATUS_MUTE))
     {
-        return_code = SMTC_MODEM_RC_FAIL;
-        SMTC_MODEM_HAL_TRACE_WARNING(
-            "%s call but the device is %s\n", __func__,
-            ( ( ( status_mask & SMTC_MODEM_STATUS_SUSPEND ) == SMTC_MODEM_STATUS_SUSPEND ) ? "suspend" : "mute" ) );
+        const char* state_str = (status_mask & SMTC_MODEM_STATUS_SUSPEND) ? "suspended" : "muted";
+        SMTC_MODEM_HAL_TRACE_WARNING("%s: Cannot join - device is %s (status: 0x%02X)\n", __func__, state_str, status_mask);
+        return SMTC_MODEM_RC_FAIL;
     }
-    else if( lorawan_api_get_activation_mode( stack_id ) == ACTIVATION_MODE_ABP )
+
+    // Handle activation mode specific join procedures
+    if(lorawan_api_get_activation_mode(stack_id) == ACTIVATION_MODE_ABP)
     {
-        lorawan_api_join( 0, stack_id );
-        increment_asynchronous_msgnumber( SMTC_MODEM_EVENT_JOINED, 0, stack_id );
-        return_code = SMTC_MODEM_RC_OK;
+        // ABP mode: directly set as joined since keys are pre-configured
+        SMTC_MODEM_HAL_TRACE_INFO("%s: ABP activation - setting joined state\n", __func__);
+        lorawan_api_join(0, stack_id);
+        increment_asynchronous_msgnumber(SMTC_MODEM_EVENT_JOINED, 0, stack_id);
+        return SMTC_MODEM_RC_OK;
     }
     else
     {
-        // Launch OTAA task
-        lorawan_join_add_task( stack_id );
+        // OTAA mode: initiate join procedure
+        SMTC_MODEM_HAL_TRACE_INFO("%s: OTAA activation - starting join task\n", __func__);
+        lorawan_join_add_task(stack_id);
+        return SMTC_MODEM_RC_OK;
     }
-
-    return return_code;
 }
+
 smtc_modem_return_code_t smtc_modem_request_uplink( uint8_t stack_id, uint8_t f_port, bool confirmed,
                                                     const uint8_t* payload, uint8_t payload_length )
 {
