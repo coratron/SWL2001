@@ -31,6 +31,9 @@ extern "C" {
 
 /**
  * @brief Initialize the radio HAL
+ * 
+ * This function initializes the SPI bus, configures GPIO pins, and sets up
+ * interrupt handlers for all supported radio types (SX126x, SX127x, etc.)
  */
 void radio_hal_init(void);
 

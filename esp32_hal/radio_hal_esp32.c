@@ -38,7 +38,11 @@
  */
 
 // SPI Configuration
-#define SPI_HOST_ID HSPI_HOST
+#ifndef CONFIG_LBM_SPI_HOST
+#define CONFIG_LBM_SPI_HOST HSPI_HOST
+#endif
+
+#define SPI_HOST_ID CONFIG_LBM_SPI_HOST
 #define SPI_DMA_CHAN 1
 
 // Default pin configuration (can be overridden via Kconfig)
@@ -72,6 +76,18 @@
 
 #ifndef CONFIG_LBM_SPI_FREQUENCY
 #define CONFIG_LBM_SPI_FREQUENCY 8000000
+#endif
+
+#ifndef CONFIG_LBM_SPI_MISO_PIN
+#define CONFIG_LBM_SPI_MISO_PIN 19
+#endif
+
+#ifndef CONFIG_LBM_SPI_MOSI_PIN
+#define CONFIG_LBM_SPI_MOSI_PIN 23
+#endif
+
+#ifndef CONFIG_LBM_SPI_CLK_PIN
+#define CONFIG_LBM_SPI_CLK_PIN 18
 #endif
 
 /*
@@ -236,21 +252,26 @@ static void IRAM_ATTR dio1_isr_handler(void* arg)
 static esp_err_t radio_spi_init(void)
 {
     spi_bus_config_t bus_config = {
-        .miso_io_num = GPIO_NUM_19,
-        .mosi_io_num = GPIO_NUM_23,
-        .sclk_io_num = GPIO_NUM_18,
+        .miso_io_num = CONFIG_LBM_SPI_MISO_PIN,
+        .mosi_io_num = CONFIG_LBM_SPI_MOSI_PIN,
+        .sclk_io_num = CONFIG_LBM_SPI_CLK_PIN,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 256,
+        .flags = SPICOMMON_BUSFLAG_MASTER,
     };
 
-    ESP_ERROR_CHECK(spi_bus_initialize(SPI_HOST_ID, &bus_config, SPI_DMA_CHAN));
+    esp_err_t ret = spi_bus_initialize(SPI_HOST_ID, &bus_config, SPI_DMA_DISABLED);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     spi_device_interface_config_t dev_config = {
         .clock_speed_hz = CONFIG_LBM_SPI_FREQUENCY,
         .mode = 0, // CPOL = 0, CPHA = 0
         .spics_io_num = -1, // We'll handle CS manually
-        .queue_size = 1,
+        .queue_size = 7,
         .flags = 0,
         .pre_cb = NULL,
         .post_cb = NULL,
