@@ -112,10 +112,9 @@ static void crypto_relay_encrypt( const uint8_t* buffer, uint16_t len, const uin
  * @param[in]   wor_s_int_key   WOR Session Integrity Key
  * @param[in]   mic_bx_buffer   MIC BX buffer
  * @param[in]   buffer          Buffer
- * @param[in]   size            Length of buffer
- * @return uint32_t             MIC value
+ * @param[in]   size            Length of buffer * @return uint32_t             MIC value
  */
-static uint32_t crypto_relay_compute_mic( const uint8_t* wor_s_int_key, const uint8_t mic_bx_buffer[16],
+static uint32_t crypto_relay_compute_mic( const uint8_t wor_s_int_key[16], const uint8_t mic_bx_buffer[16],
                                           const uint8_t* buffer, uint16_t size );
 /*
  * -----------------------------------------------------------------------------
