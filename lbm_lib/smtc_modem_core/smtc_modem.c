@@ -40,6 +40,7 @@
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
 
+#include "lbm_config.h"
 #include "smtc_modem_api.h"
 #include "smtc_modem_test_api.h"
 #include "lorawan_management_defs.h"
@@ -1001,18 +1002,27 @@ smtc_modem_return_code_t smtc_modem_get_certification_mode( uint8_t stack_id, bo
 {
     RETURN_BUSY_IF_TEST_MODE( );
 
+#ifdef ENABLE_LORAWAN_CERTIFICATION
     if( lorawan_certification_get_enabled( stack_id, enable ) != LORAWAN_CERTIFICATION_OK )
     {
         return SMTC_MODEM_RC_FAIL;
     }
-
     return SMTC_MODEM_RC_OK;
+#else
+    // Certification not enabled in build
+    if( enable != NULL )
+    {
+        *enable = false;
+    }
+    return SMTC_MODEM_RC_FAIL;
+#endif
 }
 
 smtc_modem_return_code_t smtc_modem_set_certification_mode( uint8_t stack_id, bool enable )
 {
     RETURN_BUSY_IF_TEST_MODE( );
 
+#ifdef ENABLE_LORAWAN_CERTIFICATION
     if( lorawan_certification_set_enabled( stack_id, enable ) != LORAWAN_CERTIFICATION_OK )
     {
         return SMTC_MODEM_RC_FAIL;
@@ -1022,6 +1032,10 @@ smtc_modem_return_code_t smtc_modem_set_certification_mode( uint8_t stack_id, bo
         smtc_secure_element_store_context( stack_id );
     }
     return SMTC_MODEM_RC_OK;
+#else
+    // Certification not enabled in build
+    return SMTC_MODEM_RC_FAIL;
+#endif
 }
 
 smtc_modem_return_code_t smtc_modem_request_emergency_uplink( uint8_t stack_id, uint8_t fport, bool confirmed,
@@ -2551,7 +2565,7 @@ smtc_modem_return_code_t smtc_modem_dm_get_periodic_info_fields( uint8_t        
     RETURN_INVALID_IF_NULL( dm_fields_payload );
     RETURN_INVALID_IF_NULL( dm_field_length );
 
-    if( cloud_dm_get_info_field( stack_id, dm_fields_payload, dm_field_length, DM_INFO_PERIODIC ) == DM_OK )
+    if( cloud_dm_get_info_field( stack_id, (uint8_t*)dm_fields_payload, dm_field_length, DM_INFO_PERIODIC ) == DM_OK )
     {
         return SMTC_MODEM_RC_OK;
     }
@@ -2565,7 +2579,7 @@ smtc_modem_return_code_t smtc_modem_dm_set_periodic_info_fields( uint8_t        
     RETURN_BUSY_IF_TEST_MODE( );
     RETURN_INVALID_IF_NULL( dm_fields_payload );
 
-    if( cloud_dm_set_info_field( stack_id, dm_fields_payload, dm_field_length, DM_INFO_PERIODIC ) == DM_OK )
+    if( cloud_dm_set_info_field( stack_id, (const uint8_t*)dm_fields_payload, dm_field_length, DM_INFO_PERIODIC ) == DM_OK )
     {
         return SMTC_MODEM_RC_OK;
     }
@@ -2593,7 +2607,7 @@ smtc_modem_return_code_t smtc_modem_dm_request_immediate_info_field( uint8_t    
     }
     else
     {
-        if( cloud_dm_set_info_field( stack_id, dm_fields_payload, dm_field_length, DM_INFO_NOW ) != DM_OK )
+        if( cloud_dm_set_info_field( stack_id, (const uint8_t*)dm_fields_payload, dm_field_length, DM_INFO_NOW ) != DM_OK )
         {
             return_code = SMTC_MODEM_RC_INVALID;
         }
