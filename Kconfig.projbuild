@@ -1,0 +1,229 @@
+menu "LoRa Basics Modem SX127x Configuration"
+
+    menu "Radio Selection"
+        choice LBM_SX127X_RADIO_TYPE
+            prompt "SX127x Radio Type"
+            default LBM_SX127X_RADIO_SX1276
+            help
+                Select the SX127x radio variant to use.
+
+            config LBM_SX127X_RADIO_SX1272
+                bool "SX1272"
+                help
+                    Use SX1272 radio variant.
+
+            config LBM_SX127X_RADIO_SX1276
+                bool "SX1276"
+                help
+                    Use SX1276 radio variant.
+        endchoice
+    endmenu
+
+    menu "Hardware Configuration"
+        config LBM_SX127X_SPI_HOST
+            int "SPI Host"
+            range 0 2
+            default 1
+            help
+                SPI host to use for SX127x communication.
+                0 = SPI1_HOST, 1 = SPI2_HOST, 2 = SPI3_HOST
+
+        config LBM_SX127X_SPI_FREQUENCY
+            int "SPI Frequency (Hz)"
+            range 1000000 20000000
+            default 8000000
+            help
+                SPI clock frequency for SX127x communication.
+
+        config LBM_SX127X_USE_DMA
+            bool "Use DMA for SPI transfers"
+            default y
+            help
+                Enable DMA for SPI transfers to improve performance.
+
+        config LBM_SX127X_NSS_GPIO
+            int "NSS (Chip Select) GPIO Pin"
+            range 0 39
+            default 5
+            help
+                GPIO pin connected to SX127x NSS (chip select) pin.
+
+        config LBM_SX127X_RESET_GPIO
+            int "Reset GPIO Pin"
+            range 0 39
+            default 14
+            help
+                GPIO pin connected to SX127x RESET pin.
+
+        config LBM_SX127X_DIO0_GPIO
+            int "DIO0 GPIO Pin"
+            range 0 39
+            default 26
+            help
+                GPIO pin connected to SX127x DIO0 (main interrupt pin).
+
+        config LBM_SX127X_DIO1_GPIO
+            int "DIO1 GPIO Pin"
+            range 0 39
+            default 27
+            help
+                GPIO pin connected to SX127x DIO1.
+
+        config LBM_SX127X_DIO2_GPIO
+            int "DIO2 GPIO Pin"
+            range 0 39
+            default 14
+            help
+                GPIO pin connected to SX127x DIO2.
+
+        config LBM_SX127X_MISO_GPIO
+            int "MISO GPIO Pin"
+            range 0 39
+            default 19
+            help
+                GPIO pin for SPI MISO.
+
+        config LBM_SX127X_MOSI_GPIO
+            int "MOSI GPIO Pin"
+            range 0 39
+            default 23
+            help
+                GPIO pin for SPI MOSI.
+
+        config LBM_SX127X_SCK_GPIO
+            int "SCK GPIO Pin"
+            range 0 39
+            default 18
+            help
+                GPIO pin for SPI SCK.
+    endmenu
+
+    menu "Interrupt Configuration"
+        config LBM_SX127X_INTERRUPT_PRIORITY
+            int "DIO Interrupt Priority"
+            range 1 7
+            default 3
+            help
+                Interrupt priority for DIO pins (1=highest, 7=lowest).
+
+        config LBM_SX127X_USE_DEDICATED_TASK
+            bool "Use dedicated task for radio events"
+            default y
+            help
+                Use a dedicated FreeRTOS task to handle radio events instead of processing in ISR.
+
+        config LBM_SX127X_EVENT_TASK_PRIORITY
+            int "Radio event task priority"
+            depends on LBM_SX127X_USE_DEDICATED_TASK
+            range 1 25
+            default 10
+            help
+                Priority of the radio event handling task.
+
+        config LBM_SX127X_EVENT_TASK_STACK_SIZE
+            int "Radio event task stack size"
+            depends on LBM_SX127X_USE_DEDICATED_TASK
+            range 2048 8192
+            default 4096
+            help
+                Stack size for the radio event handling task.
+
+        config LBM_SX127X_EVENT_QUEUE_SIZE
+            int "Event queue size"
+            range 8 64
+            default 16
+            help
+                Size of the event queue for DIO interrupts.
+    endmenu
+
+    menu "Feature Compilation"
+        config LBM_SX127X_ENABLE_LORA
+            bool "Enable LoRa modulation"
+            default y
+            help
+                Enable LoRa modulation support.
+
+        config LBM_SX127X_ENABLE_GFSK
+            bool "Enable GFSK modulation"
+            default y
+            help
+                Enable GFSK modulation support.
+
+        config LBM_SX127X_ENABLE_OOK
+            bool "Enable OOK modulation"
+            default n
+            help
+                Enable OOK modulation support.
+    endmenu
+
+    menu "Debug Options"
+        config LBM_SX127X_DEBUG_SPI
+            bool "Enable SPI debug logging"
+            default n
+            help
+                Enable detailed logging of SPI transactions.
+
+        config LBM_SX127X_DEBUG_INTERRUPTS
+            bool "Enable interrupt debugging"
+            default n
+            help
+                Enable detailed logging of DIO interrupt events.
+
+        config LBM_SX127X_INTERRUPT_STATS
+            bool "Enable interrupt statistics"
+            default y
+            help
+                Keep statistics on interrupt events for debugging.
+
+        config LBM_SX127X_ENABLE_REGISTER_DUMP
+            bool "Enable register dump functionality"
+            default y
+            help
+                Enable functions to dump and inspect radio registers.
+    endmenu
+
+    menu "Memory Configuration"
+        config LBM_SX127X_STATIC_ALLOCATION
+            bool "Use static memory allocation"
+            default n
+            help
+                Use static allocation instead of dynamic malloc/free.
+
+        config LBM_SX127X_SPI_BUFFER_SIZE
+            int "SPI buffer size"
+            range 256 2048
+            default 512
+            help
+                Size of internal buffers for SPI transactions.
+    endmenu
+
+    menu "Testing Options"
+        config LBM_SX127X_ENABLE_SELF_TEST
+            bool "Enable self-test functions"
+            default y
+            help
+                Enable built-in self-test and diagnostic functions.
+
+        config LBM_SX127X_TEST_SPI_LOOPBACK
+            bool "Enable SPI loopback test"
+            depends on LBM_SX127X_ENABLE_SELF_TEST
+            default n
+            help
+                Enable SPI loopback testing (requires hardware support).
+    endmenu
+
+    menu "NVS Configuration"
+        config LBM_SX127X_NVS_NAMESPACE
+            string "NVS namespace for modem context"
+            default "lbm_sx127x"
+            help
+                NVS namespace used to store modem context data.
+
+        config LBM_SX127X_NVS_ENABLE_ENCRYPTION
+            bool "Enable NVS encryption"
+            default n
+            help
+                Enable encryption for stored modem context data.
+    endmenu
+
+endmenu
