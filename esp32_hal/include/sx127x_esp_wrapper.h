@@ -123,6 +123,14 @@ sx127x_esp_err_t sx127x_esp_init(sx127x_t* radio, const sx127x_esp_config_t* con
 sx127x_esp_err_t sx127x_esp_deinit(sx127x_t* radio);
 
 /**
+ * @brief Initialize radio for LBM modem use with default configuration
+ * 
+ * @param radio Pointer to SX127x radio structure
+ * @return sx127x_esp_err_t Error code
+ */
+sx127x_esp_err_t sx127x_esp_init_for_lbm(sx127x_t* radio);
+
+/**
  * @brief Get default ESP32 configuration
  * 
  * @param config Pointer to configuration structure to fill

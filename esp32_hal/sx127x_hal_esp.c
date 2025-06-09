@@ -248,8 +248,18 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t* radio)
 {
     sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
     if (!ctx) {
-        ESP_LOGE(TAG, "Invalid radio context for reset");
-        return;
+        // Context not initialized yet - initialize it now
+        ESP_LOGI(TAG, "Radio context not initialized, initializing now");
+        sx127x_esp_err_t err = sx127x_esp_init_for_lbm((sx127x_t*)radio);
+        if (err != SX127X_ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize radio context: %s", sx127x_esp_err_to_string(err));
+            return;
+        }
+        ctx = sx127x_esp_get_context(radio);
+        if (!ctx) {
+            ESP_LOGE(TAG, "Still invalid radio context after initialization");
+            return;
+        }
     }
 
     ESP_LOGI(TAG, "Resetting SX127x radio");

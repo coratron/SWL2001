@@ -212,6 +212,268 @@ menu "LoRa Basics Modem SX127x Configuration"
                 Enable SPI loopback testing (requires hardware support).
     endmenu
 
+    menu "LoRaWAN Configuration"
+        choice LBM_LORAWAN_REGION
+            prompt "LoRaWAN Region"
+            default LBM_REGION_EU868
+            help
+                Select the LoRaWAN regional parameter set to use.
+
+            config LBM_REGION_EU868
+                bool "EU868"
+                help
+                    European 868 MHz region.
+
+            config LBM_REGION_US915
+                bool "US915"
+                help
+                    US 915 MHz region.
+
+            config LBM_REGION_AS923
+                bool "AS923"
+                help
+                    Asia 923 MHz region.
+
+            config LBM_REGION_AU915
+                bool "AU915"
+                help
+                    Australia 915 MHz region.
+
+            config LBM_REGION_CN470
+                bool "CN470"
+                help
+                    China 470 MHz region.
+
+            config LBM_REGION_IN865
+                bool "IN865"
+                help
+                    India 865 MHz region.
+
+            config LBM_REGION_KR920
+                bool "KR920"
+                help
+                    Korea 920 MHz region.
+
+            config LBM_REGION_RU864
+                bool "RU864"
+                help
+                    Russia 864 MHz region.
+
+            config LBM_REGION_WW2G4
+                bool "WW2G4"
+                help
+                    Worldwide 2.4 GHz region.
+
+            config LBM_REGION_CN470_RP_1_0
+                bool "CN470_RP_1_0"
+                help
+                    China 470 MHz region (RP 1.0).
+        endchoice
+
+        choice LBM_LORAWAN_VERSION
+            prompt "LoRaWAN Version"
+            default LBM_LORAWAN_VERSION_RP2_103
+            help
+                Select the LoRaWAN specification version.
+
+            config LBM_LORAWAN_VERSION_RP2_101
+                bool "RP2-1.0.1"
+                help
+                    LoRaWAN Regional Parameters v1.0.1.
+
+            config LBM_LORAWAN_VERSION_RP2_103
+                bool "RP2-1.0.3"
+                help
+                    LoRaWAN Regional Parameters v1.0.3.
+
+            config LBM_LORAWAN_VERSION_RP2_104
+                bool "RP2-1.0.4"
+                help
+                    LoRaWAN Regional Parameters v1.0.4.
+        endchoice
+
+        config LBM_NUMBER_OF_STACKS
+            int "Number of LoRaWAN Stacks"
+            range 1 4
+            default 1
+            help
+                Number of concurrent LoRaWAN stacks to support.
+
+        config LBM_ENABLE_CLASS_B
+            bool "Enable Class B Support"
+            default y
+            help
+                Enable LoRaWAN Class B (beacon) functionality.
+
+        config LBM_ENABLE_CLASS_C
+            bool "Enable Class C Support"
+            default n
+            help
+                Enable LoRaWAN Class C (continuous receive) functionality.
+
+        config LBM_ENABLE_MULTICAST
+            bool "Enable Multicast Support"
+            default n
+            help
+                Enable LoRaWAN multicast functionality.
+
+        config LBM_ENABLE_FUOTA
+            bool "Enable FUOTA Support"
+            default n
+            help
+                Enable Firmware Update Over The Air (FUOTA) functionality.
+    endmenu
+
+    menu "Security Configuration"
+        choice LBM_SECURE_ELEMENT
+            prompt "Secure Element Type"
+            default LBM_SOFT_SE
+            help
+                Select the type of secure element to use for LoRaWAN security.
+
+            config LBM_SOFT_SE
+                bool "Software Secure Element"
+                help
+                    Use software-based secure element implementation.
+
+            config LBM_HARD_SE
+                bool "Hardware Secure Element"
+                help
+                    Use hardware secure element (requires additional hardware).
+        endchoice
+
+        config LBM_ENABLE_CERTIFICATION
+            bool "Enable LoRaWAN Certification"
+            default n
+            help
+                Enable LoRaWAN certification test mode.
+
+        config LBM_ENABLE_STORE_AND_FORWARD
+            bool "Enable Store and Forward"
+            default n
+            help
+                Enable store and forward functionality.
+    endmenu
+
+    menu "Debug and Tracing"
+        config LBM_ENABLE_HAL_DBG_TRACE
+            bool "Enable HAL Debug Tracing"
+            default y
+            help
+                Enable debug tracing for Hardware Abstraction Layer.
+
+        config LBM_ENABLE_MODEM_TRACE
+            bool "Enable Modem Debug Tracing"
+            default y
+            help
+                Enable debug tracing for modem operations.
+
+        config LBM_ENABLE_RADIO_TRACE
+            bool "Enable Radio Debug Tracing"
+            default n
+            help
+                Enable debug tracing for radio operations.
+
+        config LBM_ENABLE_LR1MAC_TRACE
+            bool "Enable LR1MAC Debug Tracing"
+            default n
+            help
+                Enable debug tracing for LR1MAC layer.
+
+        config LBM_ENABLE_CRYPTO_TRACE
+            bool "Enable Crypto Debug Tracing"
+            default n
+            help
+                Enable debug tracing for cryptographic operations.
+
+        config LBM_TRACE_LEVEL
+            int "Trace Level"
+            range 0 5
+            default 3
+            help
+                Debug trace level (0=none, 1=error, 2=warn, 3=info, 4=debug, 5=verbose).
+    endmenu
+
+    menu "Power Management"
+        config LBM_ENABLE_LOW_POWER_MODE
+            bool "Enable Low Power Mode"
+            default y
+            help
+                Enable low power mode optimizations.
+
+        config LBM_LOW_POWER_TIMER_MS
+            int "Low Power Timer Interval (ms)"
+            depends on LBM_ENABLE_LOW_POWER_MODE
+            range 100 10000
+            default 1000
+            help
+                Timer interval for low power mode operations.
+
+        config LBM_ENABLE_POWER_OPTIMIZATION
+            bool "Enable Power Optimizations"
+            default y
+            help
+                Enable additional power consumption optimizations.
+    endmenu
+
+    menu "Advanced Configuration"
+        config LBM_ENABLE_STREAM
+            bool "Enable Stream Services"
+            default n
+            help
+                Enable stream services for large data transfers.
+
+        config LBM_ENABLE_LFU
+            bool "Enable Large File Upload"
+            default n
+            help
+                Enable large file upload functionality.
+
+        config LBM_ENABLE_DM_INFO_SERVICES
+            bool "Enable Device Management Info Services"
+            default y
+            help
+                Enable device management information services.
+
+        config LBM_ENABLE_ALMANAC_SERVICES
+            bool "Enable Almanac Services"
+            default n
+            help
+                Enable almanac services for enhanced geolocation.
+
+        config LBM_CUSTOM_RADIO_PLANNER
+            bool "Enable Custom Radio Planner"
+            default n
+            help
+                Enable custom radio planner implementation.
+
+        config LBM_ENABLE_CSMA
+            bool "Enable CSMA"
+            default n
+            help
+                Enable Carrier Sense Multiple Access functionality.
+
+        config LBM_ENABLE_LBT
+            bool "Enable Listen Before Talk"
+            default n
+            help
+                Enable Listen Before Talk functionality.
+
+        config LBM_MAX_NB_OF_RX_WINDOW
+            int "Maximum Number of RX Windows"
+            range 1 8
+            default 2
+            help
+                Maximum number of receive windows to support.
+
+        config LBM_CRYSTAL_ERROR_PPM
+            int "Crystal Error (PPM)"
+            range 1 50
+            default 10
+            help
+                Crystal oscillator error in parts per million.
+    endmenu
+
     menu "NVS Configuration"
         config LBM_SX127X_NVS_NAMESPACE
             string "NVS namespace for modem context"
