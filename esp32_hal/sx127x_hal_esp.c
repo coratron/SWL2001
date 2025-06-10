@@ -1,7 +1,7 @@
 /**
  * @file sx127x_hal_esp.c
  * @brief ESP32 Hardware Abstraction Layer for SX127x radio driver
- * 
+ *
  * This file implements the SX127x HAL functions for ESP32, providing
  * SPI communication, GPIO control, and interrupt handling.
  */
@@ -22,7 +22,7 @@
 #include "sx127x_esp_wrapper.h"
 #include "sx127x_esp_internal.h"
 
-static const char* TAG = "sx127x_hal_esp";
+static const char *TAG = "sx127x_hal_esp";
 
 // Global ISR service installation flag
 static bool s_isr_service_installed = false;
@@ -30,24 +30,25 @@ static bool s_isr_service_installed = false;
 /**
  * @brief Get radio ID based on compile-time configuration
  */
-sx127x_radio_id_t sx127x_hal_get_radio_id(const sx127x_t* radio)
+sx127x_radio_id_t sx127x_hal_get_radio_id(const sx127x_t *radio)
 {
 #if defined(CONFIG_LBM_SX127X_RADIO_SX1272) || defined(SX1272)
     return SX127X_RADIO_ID_SX1272;
 #elif defined(CONFIG_LBM_SX127X_RADIO_SX1276) || defined(SX1276)
     return SX127X_RADIO_ID_SX1276;
 #else
-    #error "Please define the radio type in Kconfig"
+#error "Please define the radio type in Kconfig"
 #endif
 }
 
 /**
  * @brief Attach DIO interrupt handlers
  */
-void sx127x_hal_dio_irq_attach(const sx127x_t* radio)
+void sx127x_hal_dio_irq_attach(const sx127x_t *radio)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx)
+    {
         ESP_LOGE(TAG, "Invalid radio context");
         return;
     }
@@ -61,23 +62,26 @@ void sx127x_hal_dio_irq_attach(const sx127x_t* radio)
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_POSEDGE,
         .mode = GPIO_MODE_INPUT,
-        .pin_bit_mask = (1ULL << ctx->dio_pins[0]) | 
-                       (1ULL << ctx->dio_pins[1]) | 
-                       (1ULL << ctx->dio_pins[2]),
+        .pin_bit_mask = (1ULL << ctx->dio_pins[0]) |
+                        (1ULL << ctx->dio_pins[1]) |
+                        (1ULL << ctx->dio_pins[2]),
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
     };
-    
+
     esp_err_t ret = gpio_config(&io_conf);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "Failed to configure DIO GPIO pins: %s", esp_err_to_name(ret));
         return;
     }
 
     // Install ISR service if not already done
-    if (!s_isr_service_installed) {
+    if (!s_isr_service_installed)
+    {
         ret = gpio_install_isr_service(CONFIG_LBM_SX127X_INTERRUPT_PRIORITY);
-        if (ret != ESP_OK) {
+        if (ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
             return;
         }
@@ -89,23 +93,25 @@ void sx127x_hal_dio_irq_attach(const sx127x_t* radio)
     gpio_isr_handler_add(ctx->dio_pins[1], sx127x_esp_dio1_isr, ctx);
     gpio_isr_handler_add(ctx->dio_pins[2], sx127x_esp_dio2_isr, ctx);
 
-    ESP_LOGI(TAG, "DIO interrupts attached: DIO0=%d, DIO1=%d, DIO2=%d", 
+    ESP_LOGI(TAG, "DIO interrupts attached: DIO0=%d, DIO1=%d, DIO2=%d",
              ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
 }
 
 /**
  * @brief Write data to SX127x via SPI
  */
-sx127x_hal_status_t sx127x_hal_write(const sx127x_t* radio, const uint16_t address, 
-                                     const uint8_t* data, const uint16_t data_len)
+sx127x_hal_status_t sx127x_hal_write(const sx127x_t *radio, const uint16_t address,
+                                     const uint8_t *data, const uint16_t data_len)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx || !ctx->initialized) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx || !ctx->initialized)
+    {
         return SX127X_HAL_STATUS_ERROR;
     }
 
     // Take SPI mutex for thread safety
-    if (xSemaphoreTake(ctx->spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (xSemaphoreTake(ctx->spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
         ESP_LOGW(TAG, "Failed to take SPI mutex");
         return SX127X_HAL_STATUS_ERROR;
     }
@@ -122,14 +128,14 @@ sx127x_hal_status_t sx127x_hal_write(const sx127x_t* radio, const uint16_t addre
 
     // Prepare SPI transaction
     spi_transaction_t trans = {
-        .length = (1 + data_len) * 8,  // Total bits
+        .length = (1 + data_len) * 8, // Total bits
         .tx_buffer = NULL,
-        .rx_buffer = NULL
-    };
+        .rx_buffer = NULL};
 
     // Allocate buffer for address + data
-    uint8_t* tx_buffer = malloc(1 + data_len);
-    if (!tx_buffer) {
+    uint8_t *tx_buffer = malloc(1 + data_len);
+    if (!tx_buffer)
+    {
         ESP_LOGE(TAG, "Failed to allocate SPI buffer");
         status = SX127X_HAL_STATUS_ERROR;
         goto cleanup;
@@ -142,7 +148,8 @@ sx127x_hal_status_t sx127x_hal_write(const sx127x_t* radio, const uint16_t addre
 
     // Execute SPI transaction
     esp_err_t ret = spi_device_transmit(ctx->spi_device, &trans);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "SPI write failed: %s", esp_err_to_name(ret));
         status = SX127X_HAL_STATUS_ERROR;
     }
@@ -164,16 +171,18 @@ cleanup:
 /**
  * @brief Read data from SX127x via SPI
  */
-sx127x_hal_status_t sx127x_hal_read(const sx127x_t* radio, const uint16_t address, 
-                                    uint8_t* data, const uint16_t data_len)
+sx127x_hal_status_t sx127x_hal_read(const sx127x_t *radio, const uint16_t address,
+                                    uint8_t *data, const uint16_t data_len)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx || !ctx->initialized) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx || !ctx->initialized)
+    {
         return SX127X_HAL_STATUS_ERROR;
     }
 
     // Take SPI mutex for thread safety
-    if (xSemaphoreTake(ctx->spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (xSemaphoreTake(ctx->spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
         ESP_LOGW(TAG, "Failed to take SPI mutex");
         return SX127X_HAL_STATUS_ERROR;
     }
@@ -189,16 +198,16 @@ sx127x_hal_status_t sx127x_hal_read(const sx127x_t* radio, const uint16_t addres
 
     // Prepare SPI transaction
     spi_transaction_t trans = {
-        .length = (1 + data_len) * 8,  // Total bits
+        .length = (1 + data_len) * 8, // Total bits
         .tx_buffer = NULL,
-        .rx_buffer = NULL
-    };
+        .rx_buffer = NULL};
 
     // Allocate buffers
-    uint8_t* tx_buffer = malloc(1 + data_len);
-    uint8_t* rx_buffer = malloc(1 + data_len);
-    
-    if (!tx_buffer || !rx_buffer) {
+    uint8_t *tx_buffer = malloc(1 + data_len);
+    uint8_t *rx_buffer = malloc(1 + data_len);
+
+    if (!tx_buffer || !rx_buffer)
+    {
         ESP_LOGE(TAG, "Failed to allocate SPI buffers");
         status = SX127X_HAL_STATUS_ERROR;
         goto cleanup;
@@ -206,14 +215,15 @@ sx127x_hal_status_t sx127x_hal_read(const sx127x_t* radio, const uint16_t addres
 
     // Prepare read command (address with MSB clear)
     tx_buffer[0] = address & 0x7F;
-    memset(&tx_buffer[1], 0, data_len);  // Dummy bytes for read
-    
+    memset(&tx_buffer[1], 0, data_len); // Dummy bytes for read
+
     trans.tx_buffer = tx_buffer;
     trans.rx_buffer = rx_buffer;
 
     // Execute SPI transaction
     esp_err_t ret = spi_device_transmit(ctx->spi_device, &trans);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "SPI read failed: %s", esp_err_to_name(ret));
         status = SX127X_HAL_STATUS_ERROR;
         goto cleanup;
@@ -227,8 +237,10 @@ sx127x_hal_status_t sx127x_hal_read(const sx127x_t* radio, const uint16_t addres
 #endif
 
 cleanup:
-    if (tx_buffer) free(tx_buffer);
-    if (rx_buffer) free(rx_buffer);
+    if (tx_buffer)
+        free(tx_buffer);
+    if (rx_buffer)
+        free(rx_buffer);
 
     // End timing measurement
     sx127x_esp_spi_timing_end(ctx);
@@ -244,25 +256,42 @@ cleanup:
 /**
  * @brief Reset the SX127x radio (weak function - can be overridden)
  */
-__attribute__((weak)) void sx127x_hal_reset(const sx127x_t* radio)
+__attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx)
+    {
         // Context not initialized yet - initialize it now
         ESP_LOGI(TAG, "Radio context not initialized, initializing now");
-        sx127x_esp_err_t err = sx127x_esp_init_for_lbm((sx127x_t*)radio);
-        if (err != SX127X_ESP_OK) {
+        sx127x_esp_err_t err = sx127x_esp_init_for_lbm((sx127x_t *)radio);
+        if (err != SX127X_ESP_OK)
+        {
             ESP_LOGE(TAG, "Failed to initialize radio context: %s", sx127x_esp_err_to_string(err));
             return;
         }
         ctx = sx127x_esp_get_context(radio);
-        if (!ctx) {
+        if (!ctx)
+        {
             ESP_LOGE(TAG, "Still invalid radio context after initialization");
             return;
         }
     }
 
     ESP_LOGI(TAG, "Resetting SX127x radio");
+
+    // Additional safety check for the GPIO value to prevent GPIO 238 error
+    if (ctx->reset_gpio >= GPIO_NUM_MAX)
+    {
+        ESP_LOGE(TAG, "Invalid reset GPIO: %d (max: %d)", ctx->reset_gpio, GPIO_NUM_MAX);
+        ESP_LOGE(TAG, "This indicates memory corruption or uninitialized context!");
+        ESP_LOGE(TAG, "Expected reset GPIO: %d", CONFIG_LBM_SX127X_RESET_GPIO);
+
+        // Use the configured value as fallback
+        ctx->reset_gpio = CONFIG_LBM_SX127X_RESET_GPIO;
+        ESP_LOGW(TAG, "Using fallback reset GPIO: %d", ctx->reset_gpio);
+    }
+
+    ESP_LOGI(TAG, "Using reset GPIO: %d", ctx->reset_gpio);
 
 #if defined(CONFIG_LBM_SX127X_RADIO_SX1272) || defined(SX1272)
     // SX1272: Set RESET pin to 1
@@ -292,28 +321,29 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t* radio)
 /**
  * @brief Get DIO1 pin state
  */
-uint32_t sx127x_hal_get_dio_1_pin_state(const sx127x_t* radio)
+uint32_t sx127x_hal_get_dio_1_pin_state(const sx127x_t *radio)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx)
+    {
         return 0;
     }
-    
+
     return gpio_get_level(ctx->dio_pins[1]);
 }
 
 /**
  * @brief Start timer for SX127x operations
  */
-sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t* radio, const uint32_t time_in_ms,
-                                           void (*callback)(void* context))
+sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t time_in_ms,
+                                           void (*callback)(void *context))
 {
     // This function is typically used for RX timeout
     // For ESP32, we can use esp_timer for high precision timing
     // Implementation would depend on specific requirements
-    
+
     ESP_LOGD(TAG, "Timer start requested: %lu ms", time_in_ms);
-    
+
     // For now, return OK - full implementation would create esp_timer
     return SX127X_HAL_STATUS_OK;
 }
@@ -321,10 +351,10 @@ sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t* radio, const uint32_t
 /**
  * @brief Stop timer
  */
-sx127x_hal_status_t sx127x_hal_timer_stop(const sx127x_t* radio)
+sx127x_hal_status_t sx127x_hal_timer_stop(const sx127x_t *radio)
 {
     ESP_LOGD(TAG, "Timer stop requested");
-    
+
     // For now, return OK - full implementation would stop esp_timer
     return SX127X_HAL_STATUS_OK;
 }
@@ -332,7 +362,7 @@ sx127x_hal_status_t sx127x_hal_timer_stop(const sx127x_t* radio)
 /**
  * @brief Check if timer is started
  */
-bool sx127x_hal_timer_is_started(const sx127x_t* radio)
+bool sx127x_hal_timer_is_started(const sx127x_t *radio)
 {
     // For now, return false - full implementation would check esp_timer state
     return false;
@@ -341,16 +371,17 @@ bool sx127x_hal_timer_is_started(const sx127x_t* radio)
 /**
  * @brief NSS (Chip Select) control (weak function - can be overridden)
  */
-__attribute__((weak)) void sx127x_hal_nss_control(const sx127x_t* radio, bool active)
+__attribute__((weak)) void sx127x_hal_nss_control(const sx127x_t *radio, bool active)
 {
-    sx127x_esp_context_t* ctx = sx127x_esp_get_context(radio);
-    if (!ctx) {
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx)
+    {
         return;
     }
-    
+
     // NSS is active low
     gpio_set_level(ctx->nss_gpio, active ? 0 : 1);
-    
+
 #ifdef CONFIG_LBM_SX127X_DEBUG_SPI
     ESP_LOGD(TAG, "NSS %s", active ? "ACTIVE" : "INACTIVE");
 #endif

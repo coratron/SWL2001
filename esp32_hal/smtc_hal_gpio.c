@@ -86,6 +86,16 @@ void hal_gpio_init_out(const hal_gpio_pin_names_t pin, const uint32_t value)
         return;
     }
 
+    // Add safety check for invalid GPIO pins
+    if ((int)pin >= (int)GPIO_NUM_MAX)
+    {
+        ESP_LOGE("hal_gpio", "❌ CRITICAL: Invalid GPIO pin %d in hal_gpio_init_out!", pin);
+        ESP_LOGE("hal_gpio", "   This indicates memory corruption or uninitialized variable!");
+        ESP_LOGE("hal_gpio", "   Expected NC=%d, but got %d", NC, pin);
+        return;
+    }
+
+    ESP_LOGD("hal_gpio", "Initializing GPIO %d as output with value %lu", pin, value);
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
@@ -202,6 +212,16 @@ void hal_gpio_set_value(const hal_gpio_pin_names_t pin, const uint32_t value)
         return;
     }
 
+    // Add safety check for invalid GPIO pins
+    if ((int)pin >= (int)GPIO_NUM_MAX)
+    {
+        ESP_LOGE("hal_gpio", "❌ CRITICAL: Invalid GPIO pin %d in hal_gpio_set_value!", pin);
+        ESP_LOGE("hal_gpio", "   This indicates memory corruption or uninitialized variable!");
+        ESP_LOGE("hal_gpio", "   Expected NC=%d, but got %d", NC, pin);
+        return;
+    }
+
+    ESP_LOGD("hal_gpio", "Setting GPIO %d to %lu", pin, value);
     gpio_set_level(pin, value);
 }
 
