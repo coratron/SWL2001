@@ -165,10 +165,7 @@ void hal_lp_timer_start(hal_lp_timer_id_t id, const uint32_t milliseconds, const
     }
 
     timer->running = true;
-    // Only log for longer timers to avoid spam during normal operation
-    if (milliseconds >= 100) {
-        ESP_LOGD(TAG, "Timer %d started for %u ms", id, milliseconds);
-    }
+    ESP_LOGI(TAG, "Timer %d started for %u ms", id, milliseconds);
 }
 
 void hal_lp_timer_stop(hal_lp_timer_id_t id)
@@ -224,7 +221,6 @@ static void timer_callback(void *arg)
 
     if (timer == NULL)
     {
-        ESP_LOGE(TAG, "Timer callback with NULL context");
         return;
     }
 

@@ -378,7 +378,7 @@ uint32_t smtc_modem_hal_get_radio_tcxo_startup_delay_ms( void )
 
 void smtc_modem_hal_set_ant_switch( bool is_tx_on )
 {
-#if defined( SX127X )
+#if !(defined( SX1272 ) || defined( SX1276 ))
     hal_gpio_set_value( RADIO_ANTENNA_SWITCH, ( is_tx_on == true ) ? 1 : 0 );
 #endif
 }
