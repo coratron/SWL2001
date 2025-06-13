@@ -123,6 +123,22 @@ sx127x_hal_status_t sx127x_hal_write(const sx127x_t *radio, const uint16_t addre
     ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_DEBUG);
 #endif
 
+    // Add critical debugging for transmission-related registers
+    if (address == 0x00 && data_len >= 1) {
+        // FIFO write - this is the payload!
+        ESP_LOGI(TAG, "🚨 CRITICAL: Writing %d bytes to FIFO (payload transmission!)", data_len);
+        ESP_LOG_BUFFER_HEX(TAG, data, data_len);
+    } else if (address == 0x01 && data_len == 1) {
+        // OpMode register - check if switching to TX mode
+        uint8_t opmode = data[0];
+        if ((opmode & 0x07) == 3) { // Mode = 3 is TX mode
+            ESP_LOGI(TAG, "🚨 CRITICAL: Setting radio to TX mode (OpMode=0x%02X)", opmode);
+        }
+    } else if (address >= 0x06 && address <= 0x08) {
+        // Frequency registers
+        ESP_LOGI(TAG, "📶 Setting frequency register 0x%02X = 0x%02X", address, data[0]);
+    }
+
     // Start timing measurement
     sx127x_esp_spi_timing_start(ctx);
 
@@ -193,6 +209,15 @@ sx127x_hal_status_t sx127x_hal_read(const sx127x_t *radio, const uint16_t addres
     ESP_LOGD(TAG, "SPI Read: Addr=0x%04X, Len=%d", address, data_len);
 #endif
 
+    // Add critical debugging for transmission-related register reads
+    if (address == 0x12 && data_len == 1) {
+        // IRQ flags register - critical for transmission status
+        ESP_LOGI(TAG, "🔍 Reading IRQ flags register (0x12) - checking for TXDONE");
+    } else if (address == 0x01 && data_len == 1) {
+        // OpMode register - check current mode
+        ESP_LOGI(TAG, "🔍 Reading OpMode register (0x01) - checking radio mode");
+    }
+
     // Start timing measurement
     sx127x_esp_spi_timing_start(ctx);
 
@@ -231,6 +256,22 @@ sx127x_hal_status_t sx127x_hal_read(const sx127x_t *radio, const uint16_t addres
 
     // Copy received data (skip first byte which is dummy)
     memcpy(data, &rx_buffer[1], data_len);
+
+    // Add critical debugging for transmission-related register reads
+    if (address == 0x12 && data_len == 1) {
+        // IRQ flags register - critical for transmission status
+        uint8_t irq_flags = data[0];
+        ESP_LOGI(TAG, "🔍 IRQ flags = 0x%02X (TXDONE=%s)", irq_flags, (irq_flags & 0x08) ? "YES" : "NO");
+    } else if (address == 0x01 && data_len == 1) {
+        // OpMode register - check current mode
+        uint8_t opmode = data[0];
+        uint8_t mode = opmode & 0x07;
+        const char* mode_str = (mode == 0) ? "Sleep" : (mode == 1) ? "Standby" : 
+                              (mode == 2) ? "FS_TX" : (mode == 3) ? "TX" : 
+                              (mode == 4) ? "FS_RX" : (mode == 5) ? "RX_CONT" : 
+                              (mode == 6) ? "RX_SINGLE" : (mode == 7) ? "CAD" : "Unknown";
+        ESP_LOGI(TAG, "🔍 OpMode = 0x%02X (%s mode, %s)", opmode, mode_str, (opmode & 0x80) ? "LoRa" : "FSK");
+    }
 
 #ifdef CONFIG_LBM_SX127X_DEBUG_SPI
     ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_DEBUG);
