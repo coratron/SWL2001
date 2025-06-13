@@ -193,7 +193,7 @@ list(REMOVE_DUPLICATES COMPONENT_SRCS)
 
 # Dynamically discover include directories
 file(GLOB_RECURSE ALL_HEADERS 
-    "${CMAKE_CURRENT_SOURCE_DIR}/esp32_hal/include/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/esp32_hal/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/lbm_lib/*.h"
 )
 
@@ -217,6 +217,7 @@ endforeach()
 
 # Add essential directories that may not have headers but are needed
 list(APPEND COMPONENT_ADD_INCLUDEDIRS
+    "esp32_hal"
     "esp32_hal/include"
     "lbm_lib"
     "lbm_lib/smtc_modem_core"

@@ -37,11 +37,11 @@
  * --- DEPENDENCIES ------------------------------------------------------------
  */
 
-#include <stdint.h>   // C99 types
-#include <stdbool.h>  // bool type
-#include <stdio.h>    // for variadic args
-#include <stdarg.h>   // for variadic args
-#include <string.h>   // for memcpy
+#include <stdint.h>  // C99 types
+#include <stdbool.h> // bool type
+#include <stdio.h>   // for variadic args
+#include <stdarg.h>  // for variadic args
+#include <string.h>  // for memcpy
 
 #include "smtc_modem_hal.h"
 #include "smtc_hal_dbg_trace.h"
@@ -62,8 +62,12 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-#if defined( SX1272 ) || defined( SX1276 )
+#if defined(SX1272) || defined(SX1276)
 #include "smtc_modem_utilities.h"
 #include "sx127x.h"
 #endif
@@ -74,7 +78,7 @@
  */
 
 #ifndef MIN
-#define MIN( a, b ) ( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
 /*
@@ -90,7 +94,7 @@
 #define NVS_KEY_CRASHLOG "crashlog"
 #define NVS_KEY_CRASHLOG_STATUS "crash_stat"
 
-static const char* TAG = "smtc_modem_hal";
+static const char *TAG = "smtc_modem_hal";
 
 /*
  * -----------------------------------------------------------------------------
@@ -102,7 +106,7 @@ static const char* TAG = "smtc_modem_hal";
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
 
-#if !defined( SX127X )
+#if !defined(SX127X)
 static hal_gpio_irq_t radio_dio_irq;
 #endif
 
@@ -116,8 +120,8 @@ RTC_DATA_ATTR static volatile bool crashlog_available_rtc;
  * --- PRIVATE FUNCTIONS DECLARATION -------------------------------------------
  */
 
-static esp_err_t nvs_write_blob_safe(const char* key, const void* data, size_t length);
-static esp_err_t nvs_read_blob_safe(const char* key, void* data, size_t* length);
+static esp_err_t nvs_write_blob_safe(const char *key, const void *data, size_t length);
+static esp_err_t nvs_read_blob_safe(const char *key, void *data, size_t *length);
 
 /*
  * -----------------------------------------------------------------------------
@@ -125,76 +129,76 @@ static esp_err_t nvs_read_blob_safe(const char* key, void* data, size_t* length)
  */
 
 /* ------------ Reset management ------------*/
-void smtc_modem_hal_reset_mcu( void )
+void smtc_modem_hal_reset_mcu(void)
 {
-    hal_mcu_reset( );
+    hal_mcu_reset();
 }
 
 /* ------------ Watchdog management ------------*/
 
-void smtc_modem_hal_reload_wdog( void )
+void smtc_modem_hal_reload_wdog(void)
 {
-    hal_watchdog_reload( );
+    hal_watchdog_reload();
 }
 
 /* ------------ Time management ------------*/
 
-uint32_t smtc_modem_hal_get_time_in_s( void )
+uint32_t smtc_modem_hal_get_time_in_s(void)
 {
-    return hal_rtc_get_time_s( );
+    return hal_rtc_get_time_s();
 }
 
-uint32_t smtc_modem_hal_get_time_in_ms( void )
+uint32_t smtc_modem_hal_get_time_in_ms(void)
 {
-    return hal_rtc_get_time_ms( );
+    return hal_rtc_get_time_ms();
 }
 
-void smtc_modem_hal_set_offset_to_test_wrapping( const uint32_t offset_to_test_wrapping )
+void smtc_modem_hal_set_offset_to_test_wrapping(const uint32_t offset_to_test_wrapping)
 {
-    hal_rtc_set_offset_to_test_wrapping( offset_to_test_wrapping );
+    hal_rtc_set_offset_to_test_wrapping(offset_to_test_wrapping);
 }
 
 /* ------------ Timer management ------------*/
 
-void smtc_modem_hal_start_timer( const uint32_t milliseconds, void ( *callback )( void* context ), void* context )
+void smtc_modem_hal_start_timer(const uint32_t milliseconds, void (*callback)(void *context), void *context)
 {
-    hal_lp_timer_start( HAL_LP_TIMER_ID_1, milliseconds,
-                        &( hal_lp_timer_irq_t ) { .context = context, .callback = callback } );
+    hal_lp_timer_start(HAL_LP_TIMER_ID_1, milliseconds,
+                       &(hal_lp_timer_irq_t){.context = context, .callback = callback});
 }
 
-void smtc_modem_hal_stop_timer( void )
+void smtc_modem_hal_stop_timer(void)
 {
-    hal_lp_timer_stop( HAL_LP_TIMER_ID_1 );
+    hal_lp_timer_stop(HAL_LP_TIMER_ID_1);
 }
 
 /* ------------ IRQ management ------------*/
 
-void smtc_modem_hal_disable_modem_irq( void )
+void smtc_modem_hal_disable_modem_irq(void)
 {
-    hal_gpio_irq_disable( );
-    hal_lp_timer_irq_disable( HAL_LP_TIMER_ID_1 );
-#if ( SX127X )
-    hal_lp_timer_irq_disable( HAL_LP_TIMER_ID_2 );
+    hal_gpio_irq_disable();
+    hal_lp_timer_irq_disable(HAL_LP_TIMER_ID_1);
+#if (SX127X)
+    hal_lp_timer_irq_disable(HAL_LP_TIMER_ID_2);
 #endif
 }
 
-void smtc_modem_hal_enable_modem_irq( void )
+void smtc_modem_hal_enable_modem_irq(void)
 {
-    hal_gpio_irq_enable( );
-    hal_lp_timer_irq_enable( HAL_LP_TIMER_ID_1 );
-#if ( SX127X )
-    hal_lp_timer_irq_enable( HAL_LP_TIMER_ID_2 );
+    hal_gpio_irq_enable();
+    hal_lp_timer_irq_enable(HAL_LP_TIMER_ID_1);
+#if (SX127X)
+    hal_lp_timer_irq_enable(HAL_LP_TIMER_ID_2);
 #endif
 }
 
 /* ------------ Context saving management ------------*/
 
-void smtc_modem_hal_context_restore( const modem_context_type_t ctx_type, uint32_t offset, uint8_t* buffer,
-                                     const uint32_t size )
+void smtc_modem_hal_context_restore(const modem_context_type_t ctx_type, uint32_t offset, uint8_t *buffer,
+                                    const uint32_t size)
 {
-    const char* nvs_key = NULL;
-    
-    switch( ctx_type )
+    const char *nvs_key = NULL;
+
+    switch (ctx_type)
     {
     case CONTEXT_MODEM:
         nvs_key = NVS_KEY_MODEM_CONTEXT;
@@ -226,18 +230,19 @@ void smtc_modem_hal_context_restore( const modem_context_type_t ctx_type, uint32
 
     size_t actual_size = size;
     esp_err_t err = nvs_read_blob_safe(nvs_key, buffer, &actual_size);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGW(TAG, "Failed to restore context %s: %s", nvs_key, esp_err_to_name(err));
         memset(buffer, 0, size);
     }
 }
 
-void smtc_modem_hal_context_store( const modem_context_type_t ctx_type, uint32_t offset, const uint8_t* buffer,
-                                   const uint32_t size )
+void smtc_modem_hal_context_store(const modem_context_type_t ctx_type, uint32_t offset, const uint8_t *buffer,
+                                  const uint32_t size)
 {
-    const char* nvs_key = NULL;
-    
-    switch( ctx_type )
+    const char *nvs_key = NULL;
+
+    switch (ctx_type)
     {
     case CONTEXT_MODEM:
         nvs_key = NVS_KEY_MODEM_CONTEXT;
@@ -266,14 +271,15 @@ void smtc_modem_hal_context_store( const modem_context_type_t ctx_type, uint32_t
     }
 
     esp_err_t err = nvs_write_blob_safe(nvs_key, buffer, size);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Failed to store context %s: %s", nvs_key, esp_err_to_name(err));
     }
 }
 
-void smtc_modem_hal_context_flash_pages_erase( const modem_context_type_t ctx_type, uint32_t offset, uint8_t nb_page )
+void smtc_modem_hal_context_flash_pages_erase(const modem_context_type_t ctx_type, uint32_t offset, uint8_t nb_page)
 {
-    switch( ctx_type )
+    switch (ctx_type)
     {
     case CONTEXT_STORE_AND_FORWARD:
         ESP_LOGW(TAG, "Store and Forward flash erase not implemented");
@@ -287,105 +293,105 @@ void smtc_modem_hal_context_flash_pages_erase( const modem_context_type_t ctx_ty
 
 /* ------------ crashlog management ------------*/
 
-void smtc_modem_hal_crashlog_store( const uint8_t* crash_string, uint8_t crash_string_length )
+void smtc_modem_hal_crashlog_store(const uint8_t *crash_string, uint8_t crash_string_length)
 {
-    crashlog_length_rtc = MIN( crash_string_length, CRASH_LOG_SIZE );
-    memcpy( crashlog_buff_rtc, crash_string, crashlog_length_rtc );
+    crashlog_length_rtc = MIN(crash_string_length, CRASH_LOG_SIZE);
+    memcpy(crashlog_buff_rtc, crash_string, crashlog_length_rtc);
     crashlog_available_rtc = true;
-    
+
     // Also store in NVS for persistence across power cycles
     nvs_write_blob_safe(NVS_KEY_CRASHLOG, crashlog_buff_rtc, crashlog_length_rtc);
     uint8_t status = 1;
     nvs_write_blob_safe(NVS_KEY_CRASHLOG_STATUS, &status, sizeof(status));
 }
 
-void smtc_modem_hal_crashlog_restore( uint8_t* crash_string, uint8_t* crash_string_length )
+void smtc_modem_hal_crashlog_restore(uint8_t *crash_string, uint8_t *crash_string_length)
 {
-    *crash_string_length = ( crashlog_length_rtc > CRASH_LOG_SIZE ) ? CRASH_LOG_SIZE : crashlog_length_rtc;
-    memcpy( crash_string, crashlog_buff_rtc, *crash_string_length );
+    *crash_string_length = (crashlog_length_rtc > CRASH_LOG_SIZE) ? CRASH_LOG_SIZE : crashlog_length_rtc;
+    memcpy(crash_string, crashlog_buff_rtc, *crash_string_length);
 }
 
-void smtc_modem_hal_crashlog_set_status( bool available )
+void smtc_modem_hal_crashlog_set_status(bool available)
 {
     crashlog_available_rtc = available;
     uint8_t status = available ? 1 : 0;
     nvs_write_blob_safe(NVS_KEY_CRASHLOG_STATUS, &status, sizeof(status));
 }
 
-bool smtc_modem_hal_crashlog_get_status( void )
+bool smtc_modem_hal_crashlog_get_status(void)
 {
     return crashlog_available_rtc;
 }
 
 /* ------------ assert management ------------*/
 
-void smtc_modem_hal_on_panic( uint8_t* func, uint32_t line, const char* fmt, ... )
+void smtc_modem_hal_on_panic(uint8_t *func, uint32_t line, const char *fmt, ...)
 {
-    uint8_t out_buff[255] = { 0 };
-    uint8_t out_len       = snprintf( ( char* ) out_buff, sizeof( out_buff ), "%s:%lu ", func, line );
+    uint8_t out_buff[255] = {0};
+    uint8_t out_len = snprintf((char *)out_buff, sizeof(out_buff), "%s:%lu ", func, line);
 
     va_list args;
-    va_start( args, fmt );
-    out_len += vsprintf( ( char* ) &out_buff[out_len], fmt, args );
-    va_end( args );
+    va_start(args, fmt);
+    out_len += vsprintf((char *)&out_buff[out_len], fmt, args);
+    va_end(args);
 
-    smtc_modem_hal_crashlog_store( out_buff, out_len );
+    smtc_modem_hal_crashlog_store(out_buff, out_len);
 
-    SMTC_HAL_TRACE_ERROR( "Modem panic: %s\n", out_buff );
+    SMTC_HAL_TRACE_ERROR("Modem panic: %s\n", out_buff);
     ESP_LOGE(TAG, "Modem panic: %s", out_buff);
-    smtc_modem_hal_reset_mcu( );
+    smtc_modem_hal_reset_mcu();
 }
 
 /* ------------ Random management ------------*/
 
-uint32_t smtc_modem_hal_get_random_nb_in_range( const uint32_t val_1, const uint32_t val_2 )
+uint32_t smtc_modem_hal_get_random_nb_in_range(const uint32_t val_1, const uint32_t val_2)
 {
-    return hal_rng_get_random_in_range( val_1, val_2 );
+    return hal_rng_get_random_in_range(val_1, val_2);
 }
 
 /* ------------ Radio env management ------------*/
 
-void smtc_modem_hal_irq_config_radio_irq( void ( *callback )( void* context ), void* context )
+void smtc_modem_hal_irq_config_radio_irq(void (*callback)(void *context), void *context)
 {
-#if defined( SX1272 ) || defined( SX1276 )
-    sx127x_t* radio = ( sx127x_t* ) smtc_modem_get_radio_context( );
-    sx127x_irq_attach( radio, callback, context );
+#if defined(SX1272) || defined(SX1276)
+    sx127x_t *radio = (sx127x_t *)smtc_modem_get_radio_context();
+    sx127x_irq_attach(radio, callback, context);
 #else
-    radio_dio_irq.pin      = RADIO_DIOX;
+    radio_dio_irq.pin = RADIO_DIOX;
     radio_dio_irq.callback = callback;
-    radio_dio_irq.context  = context;
-    hal_gpio_irq_attach( &radio_dio_irq );
+    radio_dio_irq.context = context;
+    hal_gpio_irq_attach(&radio_dio_irq);
 #endif
 }
 
-void smtc_modem_hal_start_radio_tcxo( void )
+void smtc_modem_hal_start_radio_tcxo(void)
 {
     // SX127x typically doesn't have TCXO control
     // Implement if your board has TCXO control
 }
 
-void smtc_modem_hal_stop_radio_tcxo( void )
+void smtc_modem_hal_stop_radio_tcxo(void)
 {
     // SX127x typically doesn't have TCXO control
     // Implement if your board has TCXO control
 }
 
-uint32_t smtc_modem_hal_get_radio_tcxo_startup_delay_ms( void )
+uint32_t smtc_modem_hal_get_radio_tcxo_startup_delay_ms(void)
 {
     // SX127x typically doesn't have TCXO
     return 0;
 }
 
-void smtc_modem_hal_set_ant_switch( bool is_tx_on )
+void smtc_modem_hal_set_ant_switch(bool is_tx_on)
 {
-#if !(defined( SX1272 ) || defined( SX1276 ))
-    hal_gpio_set_value( RADIO_ANTENNA_SWITCH, ( is_tx_on == true ) ? 1 : 0 );
+#if !(defined(SX1272) || defined(SX1276))
+    hal_gpio_set_value(RADIO_ANTENNA_SWITCH, (is_tx_on == true) ? 1 : 0);
 #endif
 }
 
 /* ------------ Environment management ------------*/
 
-uint8_t smtc_modem_hal_get_battery_level( void )
+uint8_t smtc_modem_hal_get_battery_level(void)
 {
     // ESP32 implementation - you may want to implement actual battery monitoring
     // According to LoRaWan 1.0.4 spec:
@@ -395,51 +401,55 @@ uint8_t smtc_modem_hal_get_battery_level( void )
     return 0; // Assume external power source for now
 }
 
-int8_t smtc_modem_hal_get_board_delay_ms( void )
+int8_t smtc_modem_hal_get_board_delay_ms(void)
 {
-    return 1; // ESP32 wake-up delay
+    // The board delay is the time needed between calling ral_set_tx()/ral_set_rx()
+    // and the radio actually entering TX/RX state. This depends on MCU speed and SPI bus speed.
+    // For ESP32 with SX127x, this should be 1-2ms, not 500ms.
+    ESP_LOGI(TAG, "Board delay: 2ms");
+    return 2; // Actual board/SPI delay - typically 1-2ms for ESP32
 }
 
 /* ------------ Trace management ------------*/
 
-void smtc_modem_hal_print_trace( const char* fmt, ... )
+void smtc_modem_hal_print_trace(const char *fmt, ...)
 {
     va_list args;
-    va_start( args, fmt );
-    hal_trace_print( fmt, args );
-    va_end( args );
+    va_start(args, fmt);
+    hal_trace_print(fmt, args);
+    va_end(args);
 }
 
 /* ------------ Fuota management ------------*/
 
-#if defined( USE_FUOTA )
-uint32_t smtc_modem_hal_get_hw_version_for_fuota( void )
+#if defined(USE_FUOTA)
+uint32_t smtc_modem_hal_get_hw_version_for_fuota(void)
 {
     // ESP32 hardware version - customize as needed
     return 0x45535033; // "ESP3" in hex
 }
 
-uint32_t smtc_modem_hal_get_fw_version_for_fuota( void )
+uint32_t smtc_modem_hal_get_fw_version_for_fuota(void)
 {
     // Firmware version - customize as needed
     return 0x01000000; // Version 1.0.0.0
 }
 
-uint8_t smtc_modem_hal_get_fw_status_available_for_fuota( void )
+uint8_t smtc_modem_hal_get_fw_status_available_for_fuota(void)
 {
     // Firmware status - customize as needed
     return 3;
 }
 
-uint32_t smtc_modem_hal_get_next_fw_version_for_fuota( void )
+uint32_t smtc_modem_hal_get_next_fw_version_for_fuota(void)
 {
     // Next firmware version - customize as needed
     return 0x01010000; // Version 1.1.0.0
 }
 
-uint8_t smtc_modem_hal_get_fw_delete_status_for_fuota( uint32_t fw_to_delete_version )
+uint8_t smtc_modem_hal_get_fw_delete_status_for_fuota(uint32_t fw_to_delete_version)
 {
-    if( fw_to_delete_version != smtc_modem_hal_get_next_fw_version_for_fuota( ) )
+    if (fw_to_delete_version != smtc_modem_hal_get_next_fw_version_for_fuota())
     {
         return 2;
     }
@@ -448,31 +458,31 @@ uint8_t smtc_modem_hal_get_fw_delete_status_for_fuota( uint32_t fw_to_delete_ver
         return 0;
     }
 }
-#endif  // USE_FUOTA
+#endif // USE_FUOTA
 
 /* ------------ Needed for Cloud  ------------*/
 
-int8_t smtc_modem_hal_get_temperature( void )
+int8_t smtc_modem_hal_get_temperature(void)
 {
     // ESP32 temperature sensor - you may want to implement actual temperature reading
     return 25; // Default room temperature
 }
 
-uint16_t smtc_modem_hal_get_voltage_mv( void )
+uint16_t smtc_modem_hal_get_voltage_mv(void)
 {
     // ESP32 voltage - you may want to implement actual voltage reading
     return 3300; // 3.3V typical
 }
 
 /* ------------ Needed for Store and Forward service  ------------*/
-#if defined( USE_STORE_AND_FORWARD )
-uint16_t smtc_modem_hal_store_and_forward_get_number_of_pages( void )
+#if defined(USE_STORE_AND_FORWARD)
+uint16_t smtc_modem_hal_store_and_forward_get_number_of_pages(void)
 {
     // ESP32 flash page configuration for store and forward
     return 10; // Customize based on your flash allocation
 }
 
-uint16_t smtc_modem_hal_flash_get_page_size( void )
+uint16_t smtc_modem_hal_flash_get_page_size(void)
 {
     // ESP32 flash page size
     return 4096; // ESP32 flash sector size
@@ -481,10 +491,28 @@ uint16_t smtc_modem_hal_flash_get_page_size( void )
 
 /* ------------ For Real Time OS compatibility  ------------*/
 
-void smtc_modem_hal_user_lbm_irq( void )
+// Task notification mechanism for immediate timer callback handling
+static TaskHandle_t main_task_handle = NULL;
+
+void smtc_modem_hal_set_main_task_handle(TaskHandle_t task_handle)
 {
-    // For FreeRTOS compatibility - can be used to notify tasks
-    // Implement if using RTOS task notification
+    main_task_handle = task_handle;
+    ESP_LOGI(TAG, "Main task handle set for immediate timer notifications");
+}
+
+void smtc_modem_hal_user_lbm_irq(void)
+{
+    // Immediately notify the main task that a timer IRQ has occurred
+    if (main_task_handle != NULL)
+    {
+        // Notify from any context (ISR or task)
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(main_task_handle, &xHigherPriorityTaskWoken);
+        if (xHigherPriorityTaskWoken == pdTRUE)
+        {
+            portYIELD_FROM_ISR();
+        }
+    }
 }
 
 /*
@@ -492,18 +520,20 @@ void smtc_modem_hal_user_lbm_irq( void )
  * --- PRIVATE FUNCTIONS DEFINITION --------------------------------------------
  */
 
-static esp_err_t nvs_write_blob_safe(const char* key, const void* data, size_t length)
+static esp_err_t nvs_write_blob_safe(const char *key, const void *data, size_t length)
 {
     nvs_handle_t nvs_handle;
     esp_err_t err;
 
     err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         return err;
     }
 
     err = nvs_set_blob(nvs_handle, key, data, length);
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
         err = nvs_commit(nvs_handle);
     }
 
@@ -511,13 +541,14 @@ static esp_err_t nvs_write_blob_safe(const char* key, const void* data, size_t l
     return err;
 }
 
-static esp_err_t nvs_read_blob_safe(const char* key, void* data, size_t* length)
+static esp_err_t nvs_read_blob_safe(const char *key, void *data, size_t *length)
 {
     nvs_handle_t nvs_handle;
     esp_err_t err;
 
     err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         return err;
     }
 
