@@ -39,6 +39,7 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
+#include "sdkconfig.h"  // For Kconfig options
 
 #include "ral_sx127x_bsp.h"
 #include "radio_utilities.h"
@@ -87,30 +88,19 @@ void ral_sx127x_bsp_get_tx_cfg( const void* context, const ral_sx127x_bsp_tx_cfg
 
     int16_t power = input_params->system_output_pwr_in_dbm + board_tx_pwr_offset_db;
 
-// Default to SX1276 for ESP32 implementation
-#if defined( SX1272 )  // SX1272MB2DAS
-    output_params->pa_cfg.pa_select           = SX127X_PA_SELECT_RFO;
-    output_params->pa_cfg.is_20_dbm_output_on = false;
-#else  // Default to SX1276
-#if( SX1276_MBED_SHIELD == SX1276MB1LAS )
-    if( input_params->freq_in_hz > 525000000 )  // RF_FREQUENCY_MID_BAND_THRESHOLD
-    {
-        output_params->pa_cfg.pa_select           = SX127X_PA_SELECT_BOOST;
+// Configure PA based on Kconfig settings
+#ifdef CONFIG_LBM_SX127X_PA_BOOST
+    // Use PA_BOOST configuration from Kconfig
+    output_params->pa_cfg.pa_select = SX127X_PA_SELECT_BOOST;
+    #ifdef CONFIG_LBM_SX127X_ENABLE_20DBM
         output_params->pa_cfg.is_20_dbm_output_on = true;
-    }
-    else
-    {
-        output_params->pa_cfg.pa_select           = SX127X_PA_SELECT_RFO;
+    #else
         output_params->pa_cfg.is_20_dbm_output_on = false;
-    }
-#elif( SX1276_MBED_SHIELD == SX1276MB1MAS )
-    output_params->pa_cfg.pa_select           = SX127X_PA_SELECT_RFO;
-    output_params->pa_cfg.is_20_dbm_output_on = false;
+    #endif
 #else
-    // Default configuration for ESP32
-    output_params->pa_cfg.pa_select           = SX127X_PA_SELECT_RFO;
+    // Use RFO configuration (default)
+    output_params->pa_cfg.pa_select = SX127X_PA_SELECT_RFO;
     output_params->pa_cfg.is_20_dbm_output_on = false;
-#endif
 #endif
 
     output_params->chip_output_pwr_in_dbm_configured = power;

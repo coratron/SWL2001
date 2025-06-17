@@ -39,6 +39,7 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
+#include "sdkconfig.h"  // For Kconfig options
 
 #include "radio_utilities.h"
 
@@ -51,8 +52,10 @@
  * -----------------------------------------------------------------------------
  * --- PRIVATE CONSTANTS -------------------------------------------------------
  */
-#ifndef DEFAULT_TX_POWER_OFFSET_DB
-#define DEFAULT_TX_POWER_OFFSET_DB ( 0 )
+#ifdef CONFIG_LBM_SX127X_TX_POWER_OFFSET
+#define DEFAULT_TX_POWER_OFFSET_DB ( CONFIG_LBM_SX127X_TX_POWER_OFFSET )
+#else
+#define DEFAULT_TX_POWER_OFFSET_DB ( 15 )  // High default for maximum power debugging
 #endif
 /*
  * -----------------------------------------------------------------------------

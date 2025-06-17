@@ -86,7 +86,7 @@ extern "C" {
  * for 8 ms : 5MS FOR WAKE UP (2MS) + CONFIG TIMER (3MS FIX !) + 3 ms interrupt routine
  */
 #ifndef RP_MARGIN_DELAY
-#define RP_MARGIN_DELAY                             30  // Increased from 8ms to handle ESP32 FreeRTOS scheduling delays
+#define RP_MARGIN_DELAY                             20  // Increased from 8ms to handle ESP32 FreeRTOS scheduling delays
 #endif
 
 

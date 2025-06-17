@@ -98,6 +98,49 @@ menu "LoRa Basics Modem SX127x Configuration"
                 GPIO pin for SPI SCK.
     endmenu
 
+    menu "Power Amplifier Configuration"
+        choice LBM_SX127X_PA_SELECT
+            prompt "Power Amplifier Selection"
+            default LBM_SX127X_PA_RFO
+            help
+                Select which power amplifier output to use.
+                RFO: Up to +15 dBm output power, lower power consumption
+                PA_BOOST: Up to +17 dBm output power (+20 dBm with PA_DAC enabled)
+
+            config LBM_SX127X_PA_RFO
+                bool "RFO (Radio Frequency Output)"
+                help
+                    Use RFO output pin. Maximum output power is +15 dBm.
+                    Lower power consumption, suitable for most applications.
+
+            config LBM_SX127X_PA_BOOST
+                bool "PA_BOOST"
+                help
+                    Use PA_BOOST output pin. Maximum output power is +17 dBm.
+                    Can reach +20 dBm with PA_DAC enabled.
+                    Requires PA_BOOST pin to be connected on your board.
+        endchoice
+
+        config LBM_SX127X_ENABLE_20DBM
+            bool "Enable +20 dBm output mode"
+            depends on LBM_SX127X_PA_BOOST
+            default n
+            help
+                Enable +20 dBm output mode when using PA_BOOST.
+                WARNING: This mode consumes significant power and may require
+                additional heat dissipation. Only enable if your board supports it.
+
+        config LBM_SX127X_TX_POWER_OFFSET
+            int "Board TX Power Offset (dB)"
+            range -10 10
+            default 0
+            help
+                Board-specific TX power offset to compensate for antenna gain,
+                matching networks, or regulatory requirements.
+                Positive values increase effective TX power.
+                Negative values decrease effective TX power.
+    endmenu
+
     menu "Interrupt Configuration"
         config LBM_SX127X_INTERRUPT_PRIORITY
             int "DIO Interrupt Priority"
