@@ -52,10 +52,9 @@ menu "LoRa Basics Modem SX127x Configuration"
             int "Reset GPIO Pin"
             range 0 39
             default 14
-            depends on !LBM_SX127X_USE_CUSTOM_RESET
             help
                 GPIO pin connected to SX127x RESET pin.
-                This option is ignored if custom reset implementation is used.
+                This option is ignored when custom reset implementation is enabled.
 
         config LBM_SX127X_USE_CUSTOM_RESET
             bool "Use Custom Reset Implementation"
@@ -64,7 +63,8 @@ menu "LoRa Basics Modem SX127x Configuration"
                 Enable this option if you have a custom reset implementation
                 (e.g., using I2C GPIO expander). When enabled, the weak
                 sx127x_hal_reset() function can be overridden with a strong
-                definition in your application code.
+                definition in your application code, and the Reset GPIO Pin
+                setting above will be ignored.
 
         config LBM_SX127X_DIO0_GPIO
             int "DIO0 GPIO Pin"
