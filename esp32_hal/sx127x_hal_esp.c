@@ -348,6 +348,10 @@ cleanup:
  */
 __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
 {
+#ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+    ESP_LOGW(TAG, "Custom reset implementation should be provided. Using default fallback.");
+#endif
+
     sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
     if (!ctx)
     {
@@ -374,11 +378,17 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
     {
         ESP_LOGE(TAG, "Invalid reset GPIO: %d (max: %d)", ctx->reset_gpio, GPIO_NUM_MAX);
         ESP_LOGE(TAG, "This indicates memory corruption or uninitialized context!");
+#ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+        ESP_LOGE(TAG, "Custom reset is enabled - reset_gpio should not be used");
+        // For custom reset, set to NC (not connected)
+        ctx->reset_gpio = GPIO_NUM_NC;
+        ESP_LOGW(TAG, "Using GPIO_NUM_NC for custom reset implementation");
+#else
         ESP_LOGE(TAG, "Expected reset GPIO: %d", CONFIG_LBM_SX127X_RESET_GPIO);
-
         // Use the configured value as fallback
         ctx->reset_gpio = CONFIG_LBM_SX127X_RESET_GPIO;
         ESP_LOGW(TAG, "Using fallback reset GPIO: %d", ctx->reset_gpio);
+#endif
     }
 
     ESP_LOGI(TAG, "Using reset GPIO: %d", ctx->reset_gpio);

@@ -36,10 +36,11 @@
  * -----------------------------------------------------------------------------
  * --- DEPENDENCIES ------------------------------------------------------------
  */
-#include <stdint.h>   // C99 types
-#include <stdbool.h>  // bool type
-
 #include "modem_event_utilities.h"
+
+#include <stdbool.h>  // bool type
+#include <stdint.h>   // C99 types
+
 #include "smtc_modem_hal_dbg_trace.h"
 /*
  * -----------------------------------------------------------------------------
@@ -48,19 +49,19 @@
 struct
 {
     uint8_t asynchronous_msgnumber;
-    uint8_t modem_event_stack_id[MODEM_NUMBER_OF_EVENTS];
-    uint8_t modem_event_count[MODEM_NUMBER_OF_EVENTS];
-    uint8_t modem_event_status[MODEM_NUMBER_OF_EVENTS];
-    uint8_t asynch_msg[MODEM_NUMBER_OF_EVENTS];
-    void ( *app_callback )( void );
+    uint8_t modem_event_stack_id[MODEM_NUMBER_OF_EVENTS + 1];  // Fixed: +1 to accommodate SMTC_MODEM_EVENT_MAX
+    uint8_t modem_event_count[MODEM_NUMBER_OF_EVENTS + 1];     // Fixed: +1 to accommodate SMTC_MODEM_EVENT_MAX
+    uint8_t modem_event_status[MODEM_NUMBER_OF_EVENTS + 1];    // Fixed: +1 to accommodate SMTC_MODEM_EVENT_MAX
+    uint8_t asynch_msg[MODEM_NUMBER_OF_EVENTS + 1];            // Fixed: +1 to accommodate SMTC_MODEM_EVENT_MAX
+    void (*app_callback)(void);
 } modem_event_ctx;
 
 #define asynchronous_msgnumber modem_event_ctx.asynchronous_msgnumber
-#define modem_event_count modem_event_ctx.modem_event_count
-#define modem_event_stack_id modem_event_ctx.modem_event_stack_id
-#define modem_event_status modem_event_ctx.modem_event_status
-#define asynch_msg modem_event_ctx.asynch_msg
-#define app_callback modem_event_ctx.app_callback
+#define modem_event_count      modem_event_ctx.modem_event_count
+#define modem_event_stack_id   modem_event_ctx.modem_event_stack_id
+#define modem_event_status     modem_event_ctx.modem_event_status
+#define asynch_msg             modem_event_ctx.asynch_msg
+#define app_callback           modem_event_ctx.app_callback
 
 /*
  * -----------------------------------------------------------------------------
@@ -80,48 +81,48 @@ struct
  * -----------------------------------------------------------------------------
  * --- PUBLIC FUNCTIONS DEFINITION ---------------------------------------------
  */
-void modem_event_init( void ( *callback )( void ) )
+void modem_event_init(void (*callback)(void))
 {
-    for( int i = 0; i < MODEM_NUMBER_OF_EVENTS; i++ )
+    for(int i = 0; i < MODEM_NUMBER_OF_EVENTS; i++)
     {
-        set_modem_event_count_and_status( i, 0, 0 );
+        set_modem_event_count_and_status(i, 0, 0);
     }
     asynchronous_msgnumber = 0;
-    app_callback           = callback;
+    app_callback = callback;
 }
-uint8_t get_modem_event_count( smtc_modem_event_type_t event_type )
+uint8_t get_modem_event_count(smtc_modem_event_type_t event_type)
 {
-    if( event_type >= MODEM_NUMBER_OF_EVENTS )
+    if(event_type >= MODEM_NUMBER_OF_EVENTS)
     {
-        SMTC_MODEM_HAL_PANIC( );
+        SMTC_MODEM_HAL_PANIC();
     }
 
-    return ( modem_event_count[event_type] );
+    return (modem_event_count[event_type]);
 }
 
-uint8_t get_modem_event_status( uint8_t event_type )
+uint8_t get_modem_event_status(uint8_t event_type)
 {
-    if( event_type >= MODEM_NUMBER_OF_EVENTS )
+    if(event_type >= MODEM_NUMBER_OF_EVENTS)
     {
-        SMTC_MODEM_HAL_PANIC( );
+        SMTC_MODEM_HAL_PANIC();
     }
-    return ( modem_event_status[event_type] );
+    return (modem_event_status[event_type]);
 }
 
-void set_modem_event_count_and_status( uint8_t event_type, uint8_t value, uint8_t status )
+void set_modem_event_count_and_status(uint8_t event_type, uint8_t value, uint8_t status)
 {
-    if( event_type < MODEM_NUMBER_OF_EVENTS )
+    if(event_type < MODEM_NUMBER_OF_EVENTS)
     {
-        modem_event_count[event_type]  = value;
+        modem_event_count[event_type] = value;
         modem_event_status[event_type] = status;
     }
 }
 
-void increment_modem_event_count_and_status( uint8_t event_type, uint8_t status )
+void increment_modem_event_count_and_status(uint8_t event_type, uint8_t status)
 {
-    if( event_type < MODEM_NUMBER_OF_EVENTS )
+    if(event_type < MODEM_NUMBER_OF_EVENTS)
     {
-        if( modem_event_count[event_type] < 255 )
+        if(modem_event_count[event_type] < 255)
         {
             modem_event_count[event_type]++;
         }
@@ -130,9 +131,9 @@ void increment_modem_event_count_and_status( uint8_t event_type, uint8_t status 
     }
 }
 
-void decrement_asynchronous_msgnumber( void )
+void decrement_asynchronous_msgnumber(void)
 {
-    if( asynchronous_msgnumber > 0 )
+    if(asynchronous_msgnumber > 0)
     {
         asynchronous_msgnumber--;
     }
@@ -142,39 +143,39 @@ void decrement_asynchronous_msgnumber( void )
     }
 }
 
-uint8_t get_asynchronous_msgnumber( void )
+uint8_t get_asynchronous_msgnumber(void)
 {
-    return ( asynchronous_msgnumber );
+    return (asynchronous_msgnumber);
 }
 
-void increment_asynchronous_msgnumber( uint8_t event_type, uint8_t status, uint8_t stack_id )
+void increment_asynchronous_msgnumber(uint8_t event_type, uint8_t status, uint8_t stack_id)
 {
     // Next condition should never append because only one asynch msg by type of message
-    if( asynchronous_msgnumber >= MODEM_NUMBER_OF_EVENTS )
+    if(asynchronous_msgnumber >= MODEM_NUMBER_OF_EVENTS)
     {
         return;
     }
     uint8_t tmp;
-    tmp = get_modem_event_count( event_type );
+    tmp = get_modem_event_count(event_type);
 
-    if( tmp == 0 )
+    if(tmp == 0)
     {
         asynch_msg[asynchronous_msgnumber] = event_type;
         asynchronous_msgnumber++;
     }
 
-    increment_modem_event_count_and_status( event_type, status );
+    increment_modem_event_count_and_status(event_type, status);
     modem_event_stack_id[event_type] = stack_id;
 
-    if( *app_callback != NULL )
+    if(*app_callback != NULL)
     {
-        app_callback( );
+        app_callback();
     }
 }
 
-uint8_t get_last_msg_event( uint8_t* stack_id )
+uint8_t get_last_msg_event(uint8_t* stack_id)
 {
-    if( asynchronous_msgnumber > 0 )
+    if(asynchronous_msgnumber > 0)
     {
         *stack_id = modem_event_stack_id[asynch_msg[asynchronous_msgnumber - 1]];
         return asynch_msg[asynchronous_msgnumber - 1];

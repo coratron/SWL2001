@@ -63,7 +63,11 @@ void sx127x_esp_get_default_config(sx127x_esp_config_t *config)
     config->mosi_gpio = CONFIG_LBM_SX127X_MOSI_GPIO;
     config->sck_gpio = CONFIG_LBM_SX127X_SCK_GPIO;
     config->nss_gpio = CONFIG_LBM_SX127X_NSS_GPIO;
+#ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+    config->reset_gpio = GPIO_NUM_NC;  // Not used when custom reset is enabled
+#else
     config->reset_gpio = CONFIG_LBM_SX127X_RESET_GPIO;
+#endif
     config->dio0_gpio = CONFIG_LBM_SX127X_DIO0_GPIO;
     config->dio1_gpio = CONFIG_LBM_SX127X_DIO1_GPIO;
     config->dio2_gpio = CONFIG_LBM_SX127X_DIO2_GPIO;

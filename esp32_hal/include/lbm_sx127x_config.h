@@ -10,6 +10,7 @@
 #define LBM_SX127X_CONFIG_H
 
 #include "sdkconfig.h"
+#include "driver/gpio.h"  // For GPIO_NUM_NC
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +26,11 @@ extern "C" {
 
 // GPIO Pin Configuration
 #define LBM_SX127X_NSS_GPIO CONFIG_LBM_SX127X_NSS_GPIO
+#ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+#define LBM_SX127X_RESET_GPIO GPIO_NUM_NC  // Not used when custom reset is enabled
+#else
 #define LBM_SX127X_RESET_GPIO CONFIG_LBM_SX127X_RESET_GPIO
+#endif
 #define LBM_SX127X_DIO0_GPIO CONFIG_LBM_SX127X_DIO0_GPIO
 #define LBM_SX127X_DIO1_GPIO CONFIG_LBM_SX127X_DIO1_GPIO
 #define LBM_SX127X_DIO2_GPIO CONFIG_LBM_SX127X_DIO2_GPIO
