@@ -39,7 +39,6 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
-#include "sdkconfig.h"  // For Kconfig options
 
 #include "radio_utilities.h"
 
