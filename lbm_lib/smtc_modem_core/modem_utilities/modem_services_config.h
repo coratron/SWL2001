@@ -39,7 +39,9 @@
 extern "C" {
 #endif
 
+#ifdef ADD_CERTIFICATION
 #include "lorawan_certification.h"
+#endif
 #include "lorawan_join_management.h"
 #include "lorawan_dwn_ack_management.h"
 
@@ -112,7 +114,9 @@ typedef struct modem_service_config_s
 } modem_service_config_t;
 
 static modem_service_config_t modem_service_config[] = {
+#ifdef ADD_CERTIFICATION
     { .service_id = 0, .stack_id = 0, .callbacks_init_service = lorawan_certification_services_init },
+#endif
 #ifdef ADD_RELAY_RX
     { .service_id = 0, .stack_id = 0, .callbacks_init_service = lorawan_relay_rx_services_init },
 #endif

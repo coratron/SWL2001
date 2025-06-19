@@ -162,35 +162,48 @@ void region_au_915_init( smtc_real_t* real )
     memset( dr_distribution_init, 0, real_const.const_number_of_tx_dr );
     memset( dr_distribution, 0, real_const.const_number_of_tx_dr );
 
-    // Enable all channels
-    memset( &unwrapped_channel_mask[0], 0xFF, BANK_MAX_AU915 );
-    memset( &snapshot_channel_tx_mask[0], 0xFF, BANK_MAX_AU915 );
+    // Initialize channel masks - only enable Bank 1 (125kHz channels 8-15)
+    memset( &unwrapped_channel_mask[0], 0x00, BANK_MAX_AU915 );
+    memset( &snapshot_channel_tx_mask[0], 0x00, BANK_MAX_AU915 );
+    
+    // Enable only Bank 1 (channels 8-15)
+    unwrapped_channel_mask[BANK_1_125_AU915] = 0xFF;
+    snapshot_channel_tx_mask[BANK_1_125_AU915] = 0xFF;
 
-    snapshot_bank_tx_mask = 0;
+    snapshot_bank_tx_mask = BANK_1_125_AU915;  // Start with Bank 1
 }
 
 void region_au_915_config( smtc_real_t* real )
 {
-    // Tx 125 kHz channels
+    // Tx 125 kHz channels - Only enable Bank 1 (channels 8-15)
     for( uint8_t i = 0; i < NUMBER_OF_TX_CHANNEL_AU_915 - 8; i++ )
     {
-        SMTC_PUT_BIT8( channel_index_enabled, i, CHANNEL_ENABLED );
+        // Only enable Bank 1 channels (8-15)
+        if( i >= 8 && i <= 15 )
+        {
+            SMTC_PUT_BIT8( channel_index_enabled, i, CHANNEL_ENABLED );
+            // Enable default datarate
+            dr_bitfield_tx_channel[i] = DEFAULT_TX_DR_125_BIT_FIELD_AU_915;
+        }
+        else
+        {
+            SMTC_PUT_BIT8( channel_index_enabled, i, CHANNEL_DISABLED );
+            dr_bitfield_tx_channel[i] = 0;
+        }
 
-        // Enable default datarate
-        dr_bitfield_tx_channel[i] = DEFAULT_TX_DR_125_BIT_FIELD_AU_915;
-
-        SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "TX - idx:%u, freq: %d, dr: 0x%x,\n%s", i,
+        SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "TX - idx:%u, freq: %d, dr: 0x%x, enabled: %s\n%s", i,
                                            region_au_915_get_tx_frequency_channel( real, i ), dr_bitfield_tx_channel[i],
+                                           (i >= 8 && i <= 15) ? "YES" : "NO",
                                            ( ( i % 8 ) == 7 ) ? "---\n" : "" );
     }
-    // Tx 500 kHz channels
+    // Tx 500 kHz channels - Disable all 500kHz channels since we only want Bank 1 (125kHz)
     for( uint8_t i = NUMBER_OF_TX_CHANNEL_AU_915 - 8; i < NUMBER_OF_TX_CHANNEL_AU_915; i++ )
     {
-        SMTC_PUT_BIT8( channel_index_enabled, i, CHANNEL_ENABLED );
-        // Enable default datarate
-        dr_bitfield_tx_channel[i] = DEFAULT_TX_DR_500_BIT_FIELD_AU_915;
+        SMTC_PUT_BIT8( channel_index_enabled, i, CHANNEL_DISABLED );
+        // Disable datarate
+        dr_bitfield_tx_channel[i] = 0;
 
-        SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "TX - idx:%u, freq: %d, dr: 0x%x,\n%s", i,
+        SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "TX - idx:%u, freq: %d, dr: 0x%x, enabled: NO\n%s", i,
                                            region_au_915_get_tx_frequency_channel( real, i ), dr_bitfield_tx_channel[i],
                                            ( ( i % 8 ) == 7 ) ? "---\n" : "" );
     }
@@ -452,8 +465,14 @@ void region_au_915_set_channel_mask( smtc_real_t* real )
 
 void region_au_915_init_join_snapshot_channel_mask( smtc_real_t* real )
 {
-    memset( snapshot_channel_tx_mask, 0xFF, BANK_MAX_AU915 );
-    snapshot_bank_tx_mask = 0;
+    // Initialize all channel masks to 0 (disabled)
+    memset( snapshot_channel_tx_mask, 0x00, BANK_MAX_AU915 );
+    
+    // Enable only Bank 1 (125kHz channels 8-15)
+    snapshot_channel_tx_mask[BANK_1_125_AU915] = 0xFF;
+    
+    // Start with Bank 1 for join operations
+    snapshot_bank_tx_mask = BANK_1_125_AU915;
 }
 
 void region_au_915_init_after_join_snapshot_channel_mask( smtc_real_t* real, uint8_t tx_data_rate,
@@ -508,23 +527,19 @@ void region_au_915_init_after_join_snapshot_channel_mask( smtc_real_t* real, uin
 
     if( first_ch_mask_received == ch_mask_after_join_init )
     {
-        // 125 kHz channels, init the right block only
-        unwrapped_channel_mask[ch_mask_block] = 0xFF;  // In case of BW500, read the remark above
+        // Only enable Bank 1 (125 kHz channels 8-15) - ignore the calculated block
+        unwrapped_channel_mask[BANK_1_125_AU915] = 0xFF;
 
-        // 500 kHz channels, init the corresponding 500kHz frequency to this block
-        SMTC_PUT_BIT8( &unwrapped_channel_mask[BANK_8_500_AU915], ch_mask_block, CHANNEL_ENABLED );
+        // Disable 500 kHz channels since we only want Bank 1 (125kHz)
+        unwrapped_channel_mask[BANK_8_500_AU915] = 0x00;
     }
     else if( first_ch_mask_received == ch_mask_after_join_8ch )
     {
-        // 125 kHz channels, init all blocks, except the previously set
-        for( au_915_channels_bank_t i = 0; i < BANK_8_500_AU915; i++ )
-        {
-            unwrapped_channel_mask[i] = 0xFF;
-        }
-        unwrapped_channel_mask[ch_mask_block] = 0x00;  // In case of BW500, read the remark above
+        // Only enable Bank 1 (125 kHz channels 8-15)
+        unwrapped_channel_mask[BANK_1_125_AU915] = 0xFF;
 
-        // 500 kHz channels, init all 500kHz channels, except the previously set
-        unwrapped_channel_mask[BANK_8_500_AU915] = ( 0xFF & ~( 1 << ch_mask_block ) );
+        // Disable 500 kHz channels since we only want Bank 1 (125kHz)
+        unwrapped_channel_mask[BANK_8_500_AU915] = 0x00;
     }
     else
     {

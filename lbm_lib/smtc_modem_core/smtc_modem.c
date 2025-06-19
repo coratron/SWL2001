@@ -1001,18 +1001,24 @@ smtc_modem_return_code_t smtc_modem_get_certification_mode( uint8_t stack_id, bo
 {
     RETURN_BUSY_IF_TEST_MODE( );
 
+#ifdef ADD_CERTIFICATION
     if( lorawan_certification_get_enabled( stack_id, enable ) != LORAWAN_CERTIFICATION_OK )
     {
         return SMTC_MODEM_RC_FAIL;
     }
 
     return SMTC_MODEM_RC_OK;
+#else
+    *enable = false;
+    return SMTC_MODEM_RC_NOT_INIT;
+#endif
 }
 
 smtc_modem_return_code_t smtc_modem_set_certification_mode( uint8_t stack_id, bool enable )
 {
     RETURN_BUSY_IF_TEST_MODE( );
 
+#ifdef ADD_CERTIFICATION
     if( lorawan_certification_set_enabled( stack_id, enable ) != LORAWAN_CERTIFICATION_OK )
     {
         return SMTC_MODEM_RC_FAIL;
@@ -1022,6 +1028,9 @@ smtc_modem_return_code_t smtc_modem_set_certification_mode( uint8_t stack_id, bo
         smtc_secure_element_store_context( stack_id );
     }
     return SMTC_MODEM_RC_OK;
+#else
+    return SMTC_MODEM_RC_NOT_INIT;
+#endif
 }
 
 smtc_modem_return_code_t smtc_modem_request_emergency_uplink( uint8_t stack_id, uint8_t fport, bool confirmed,

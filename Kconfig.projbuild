@@ -1,0 +1,534 @@
+menu "LoRa Basics Modem SX127x Configuration"
+
+    menu "Radio Selection"
+        choice LBM_SX127X_RADIO_TYPE
+            prompt "SX127x Radio Type"
+            default LBM_SX127X_RADIO_SX1276
+            help
+                Select the SX127x radio variant to use.
+
+            config LBM_SX127X_RADIO_SX1272
+                bool "SX1272"
+                help
+                    Use SX1272 radio variant.
+
+            config LBM_SX127X_RADIO_SX1276
+                bool "SX1276"
+                help
+                    Use SX1276 radio variant.
+        endchoice
+    endmenu
+
+    menu "Hardware Configuration"
+        config LBM_SX127X_SPI_HOST
+            int "SPI Host"
+            range 0 2
+            default 1
+            help
+                SPI host to use for SX127x communication.
+                0 = SPI1_HOST, 1 = SPI2_HOST, 2 = SPI3_HOST
+
+        config LBM_SX127X_SPI_FREQUENCY
+            int "SPI Frequency (Hz)"
+            range 1000000 20000000
+            default 8000000
+            help
+                SPI clock frequency for SX127x communication.
+
+        config LBM_SX127X_USE_DMA
+            bool "Use DMA for SPI transfers"
+            default y
+            help
+                Enable DMA for SPI transfers to improve performance.
+
+        config LBM_SX127X_NSS_GPIO
+            int "NSS (Chip Select) GPIO Pin"
+            range 0 39
+            default 5
+            help
+                GPIO pin connected to SX127x NSS (chip select) pin.
+
+        config LBM_SX127X_RESET_GPIO
+            int "Reset GPIO Pin"
+            range 0 39
+            default 14
+            help
+                GPIO pin connected to SX127x RESET pin.
+
+        config LBM_SX127X_DIO0_GPIO
+            int "DIO0 GPIO Pin"
+            range 0 39
+            default 26
+            help
+                GPIO pin connected to SX127x DIO0 (main interrupt pin).
+
+        config LBM_SX127X_DIO1_GPIO
+            int "DIO1 GPIO Pin"
+            range 0 39
+            default 27
+            help
+                GPIO pin connected to SX127x DIO1.
+
+        config LBM_SX127X_DIO2_GPIO
+            int "DIO2 GPIO Pin"
+            range 0 39
+            default 14
+            help
+                GPIO pin connected to SX127x DIO2.
+
+        config LBM_SX127X_MISO_GPIO
+            int "MISO GPIO Pin"
+            range 0 39
+            default 19
+            help
+                GPIO pin for SPI MISO.
+
+        config LBM_SX127X_MOSI_GPIO
+            int "MOSI GPIO Pin"
+            range 0 39
+            default 23
+            help
+                GPIO pin for SPI MOSI.
+
+        config LBM_SX127X_SCK_GPIO
+            int "SCK GPIO Pin"
+            range 0 39
+            default 18
+            help
+                GPIO pin for SPI SCK.
+    endmenu
+
+    menu "Power Amplifier Configuration"
+        choice LBM_SX127X_PA_SELECT
+            prompt "Power Amplifier Selection"
+            default LBM_SX127X_PA_RFO
+            help
+                Select which power amplifier output to use.
+                RFO: Up to +15 dBm output power, lower power consumption
+                PA_BOOST: Up to +17 dBm output power (+20 dBm with PA_DAC enabled)
+
+            config LBM_SX127X_PA_RFO
+                bool "RFO (Radio Frequency Output)"
+                help
+                    Use RFO output pin. Maximum output power is +15 dBm.
+                    Lower power consumption, suitable for most applications.
+
+            config LBM_SX127X_PA_BOOST
+                bool "PA_BOOST"
+                help
+                    Use PA_BOOST output pin. Maximum output power is +17 dBm.
+                    Can reach +20 dBm with PA_DAC enabled.
+                    Requires PA_BOOST pin to be connected on your board.
+        endchoice
+
+        config LBM_SX127X_ENABLE_20DBM
+            bool "Enable +20 dBm output mode"
+            depends on LBM_SX127X_PA_BOOST
+            default n
+            help
+                Enable +20 dBm output mode when using PA_BOOST.
+                WARNING: This mode consumes significant power and may require
+                additional heat dissipation. Only enable if your board supports it.
+
+        config LBM_SX127X_TX_POWER_OFFSET
+            int "Board TX Power Offset (dB)"
+            range -10 10
+            default 0
+            help
+                Board-specific TX power offset to compensate for antenna gain,
+                matching networks, or regulatory requirements.
+                Positive values increase effective TX power.
+                Negative values decrease effective TX power.
+    endmenu
+
+    menu "Interrupt Configuration"
+        config LBM_SX127X_INTERRUPT_PRIORITY
+            int "DIO Interrupt Priority"
+            range 1 7
+            default 3
+            help
+                Interrupt priority for DIO pins (1=highest, 7=lowest).
+
+        config LBM_SX127X_USE_DEDICATED_TASK
+            bool "Use dedicated task for radio events"
+            default y
+            help
+                Use a dedicated FreeRTOS task to handle radio events instead of processing in ISR.
+
+        config LBM_SX127X_EVENT_TASK_PRIORITY
+            int "Radio event task priority"
+            depends on LBM_SX127X_USE_DEDICATED_TASK
+            range 1 25
+            default 10
+            help
+                Priority of the radio event handling task.
+
+        config LBM_SX127X_EVENT_TASK_STACK_SIZE
+            int "Radio event task stack size"
+            depends on LBM_SX127X_USE_DEDICATED_TASK
+            range 2048 8192
+            default 4096
+            help
+                Stack size for the radio event handling task.
+
+        config LBM_SX127X_EVENT_QUEUE_SIZE
+            int "Event queue size"
+            range 8 64
+            default 16
+            help
+                Size of the event queue for DIO interrupts.
+    endmenu
+
+    menu "Feature Compilation"
+        config LBM_SX127X_ENABLE_LORA
+            bool "Enable LoRa modulation"
+            default y
+            help
+                Enable LoRa modulation support.
+
+        config LBM_SX127X_ENABLE_GFSK
+            bool "Enable GFSK modulation"
+            default y
+            help
+                Enable GFSK modulation support.
+
+        config LBM_SX127X_ENABLE_OOK
+            bool "Enable OOK modulation"
+            default n
+            help
+                Enable OOK modulation support.
+    endmenu
+
+    menu "Debug Options"
+        config LBM_SX127X_DEBUG_SPI
+            bool "Enable SPI debug logging"
+            default n
+            help
+                Enable detailed logging of SPI transactions.
+
+        config LBM_SX127X_DEBUG_INTERRUPTS
+            bool "Enable interrupt debugging"
+            default n
+            help
+                Enable detailed logging of DIO interrupt events.
+
+        config LBM_SX127X_INTERRUPT_STATS
+            bool "Enable interrupt statistics"
+            default y
+            help
+                Keep statistics on interrupt events for debugging.
+
+        config LBM_SX127X_ENABLE_REGISTER_DUMP
+            bool "Enable register dump functionality"
+            default y
+            help
+                Enable functions to dump and inspect radio registers.
+    endmenu
+
+    menu "Memory Configuration"
+        config LBM_SX127X_STATIC_ALLOCATION
+            bool "Use static memory allocation"
+            default n
+            help
+                Use static allocation instead of dynamic malloc/free.
+
+        config LBM_SX127X_SPI_BUFFER_SIZE
+            int "SPI buffer size"
+            range 256 2048
+            default 512
+            help
+                Size of internal buffers for SPI transactions.
+    endmenu
+
+    menu "Testing Options"
+        config LBM_SX127X_ENABLE_SELF_TEST
+            bool "Enable self-test functions"
+            default y
+            help
+                Enable built-in self-test and diagnostic functions.
+
+        config LBM_SX127X_TEST_SPI_LOOPBACK
+            bool "Enable SPI loopback test"
+            depends on LBM_SX127X_ENABLE_SELF_TEST
+            default n
+            help
+                Enable SPI loopback testing (requires hardware support).
+    endmenu
+
+    menu "LoRaWAN Configuration"
+        choice LBM_LORAWAN_REGION
+            prompt "LoRaWAN Region"
+            default LBM_REGION_EU868
+            help
+                Select the LoRaWAN regional parameter set to use.
+
+            config LBM_REGION_EU868
+                bool "EU868"
+                help
+                    European 868 MHz region.
+
+            config LBM_REGION_US915
+                bool "US915"
+                help
+                    US 915 MHz region.
+
+            config LBM_REGION_AS923
+                bool "AS923"
+                help
+                    Asia 923 MHz region.
+
+            config LBM_REGION_AU915
+                bool "AU915"
+                help
+                    Australia 915 MHz region.
+
+            config LBM_REGION_CN470
+                bool "CN470"
+                help
+                    China 470 MHz region.
+
+            config LBM_REGION_IN865
+                bool "IN865"
+                help
+                    India 865 MHz region.
+
+            config LBM_REGION_KR920
+                bool "KR920"
+                help
+                    Korea 920 MHz region.
+
+            config LBM_REGION_RU864
+                bool "RU864"
+                help
+                    Russia 864 MHz region.
+
+            config LBM_REGION_WW2G4
+                bool "WW2G4"
+                help
+                    Worldwide 2.4 GHz region.
+
+            config LBM_REGION_CN470_RP_1_0
+                bool "CN470_RP_1_0"
+                help
+                    China 470 MHz region (RP 1.0).
+        endchoice
+
+        choice LBM_LORAWAN_VERSION
+            prompt "LoRaWAN Version"
+            default LBM_LORAWAN_VERSION_RP2_103
+            help
+                Select the LoRaWAN specification version.
+
+            config LBM_LORAWAN_VERSION_RP2_101
+                bool "RP2-1.0.1"
+                help
+                    LoRaWAN Regional Parameters v1.0.1.
+
+            config LBM_LORAWAN_VERSION_RP2_103
+                bool "RP2-1.0.3"
+                help
+                    LoRaWAN Regional Parameters v1.0.3.
+
+            config LBM_LORAWAN_VERSION_RP2_104
+                bool "RP2-1.0.4"
+                help
+                    LoRaWAN Regional Parameters v1.0.4.
+        endchoice
+
+        config LBM_NUMBER_OF_STACKS
+            int "Number of LoRaWAN Stacks"
+            range 1 4
+            default 1
+            help
+                Number of concurrent LoRaWAN stacks to support.
+
+        config LBM_ENABLE_CLASS_B
+            bool "Enable Class B Support"
+            default y
+            help
+                Enable LoRaWAN Class B (beacon) functionality.
+
+        config LBM_ENABLE_CLASS_C
+            bool "Enable Class C Support"
+            default n
+            help
+                Enable LoRaWAN Class C (continuous receive) functionality.
+
+        config LBM_ENABLE_MULTICAST
+            bool "Enable Multicast Support"
+            default n
+            help
+                Enable LoRaWAN multicast functionality.
+
+        config LBM_ENABLE_FUOTA
+            bool "Enable FUOTA Support"
+            default n
+            help
+                Enable Firmware Update Over The Air (FUOTA) functionality.
+    endmenu
+
+    menu "Security Configuration"
+        choice LBM_SECURE_ELEMENT
+            prompt "Secure Element Type"
+            default LBM_SOFT_SE
+            help
+                Select the type of secure element to use for LoRaWAN security.
+
+            config LBM_SOFT_SE
+                bool "Software Secure Element"
+                help
+                    Use software-based secure element implementation.
+
+            config LBM_HARD_SE
+                bool "Hardware Secure Element"
+                help
+                    Use hardware secure element (requires additional hardware).
+        endchoice
+
+        config LBM_ENABLE_CERTIFICATION
+            bool "Enable LoRaWAN Certification"
+            default n
+            help
+                Enable LoRaWAN certification test mode.
+
+        config LBM_ENABLE_STORE_AND_FORWARD
+            bool "Enable Store and Forward"
+            default n
+            help
+                Enable store and forward functionality.
+    endmenu
+
+    menu "Debug and Tracing"
+        config LBM_ENABLE_HAL_DBG_TRACE
+            bool "Enable HAL Debug Tracing"
+            default y
+            help
+                Enable debug tracing for Hardware Abstraction Layer.
+
+        config LBM_ENABLE_MODEM_TRACE
+            bool "Enable Modem Debug Tracing"
+            default y
+            help
+                Enable debug tracing for modem operations.
+
+        config LBM_ENABLE_RADIO_TRACE
+            bool "Enable Radio Debug Tracing"
+            default n
+            help
+                Enable debug tracing for radio operations.
+
+        config LBM_ENABLE_LR1MAC_TRACE
+            bool "Enable LR1MAC Debug Tracing"
+            default n
+            help
+                Enable debug tracing for LR1MAC layer.
+
+        config LBM_ENABLE_CRYPTO_TRACE
+            bool "Enable Crypto Debug Tracing"
+            default n
+            help
+                Enable debug tracing for cryptographic operations.
+
+        config LBM_TRACE_LEVEL
+            int "Trace Level"
+            range 0 5
+            default 3
+            help
+                Debug trace level (0=none, 1=error, 2=warn, 3=info, 4=debug, 5=verbose).
+    endmenu
+
+    menu "Power Management"
+        config LBM_ENABLE_LOW_POWER_MODE
+            bool "Enable Low Power Mode"
+            default y
+            help
+                Enable low power mode optimizations.
+
+        config LBM_LOW_POWER_TIMER_MS
+            int "Low Power Timer Interval (ms)"
+            depends on LBM_ENABLE_LOW_POWER_MODE
+            range 100 10000
+            default 1000
+            help
+                Timer interval for low power mode operations.
+
+        config LBM_ENABLE_POWER_OPTIMIZATION
+            bool "Enable Power Optimizations"
+            default y
+            help
+                Enable additional power consumption optimizations.
+    endmenu
+
+    menu "Advanced Configuration"
+        config LBM_ENABLE_STREAM
+            bool "Enable Stream Services"
+            default n
+            help
+                Enable stream services for large data transfers.
+
+        config LBM_ENABLE_LFU
+            bool "Enable Large File Upload"
+            default n
+            help
+                Enable large file upload functionality.
+
+        config LBM_ENABLE_DM_INFO_SERVICES
+            bool "Enable Device Management Info Services"
+            default y
+            help
+                Enable device management information services.
+
+        config LBM_ENABLE_ALMANAC_SERVICES
+            bool "Enable Almanac Services"
+            default n
+            help
+                Enable almanac services for enhanced geolocation.
+
+        config LBM_CUSTOM_RADIO_PLANNER
+            bool "Enable Custom Radio Planner"
+            default n
+            help
+                Enable custom radio planner implementation.
+
+        config LBM_ENABLE_CSMA
+            bool "Enable CSMA"
+            default n
+            help
+                Enable Carrier Sense Multiple Access functionality.
+
+        config LBM_ENABLE_LBT
+            bool "Enable Listen Before Talk"
+            default n
+            help
+                Enable Listen Before Talk functionality.
+
+        config LBM_MAX_NB_OF_RX_WINDOW
+            int "Maximum Number of RX Windows"
+            range 1 8
+            default 2
+            help
+                Maximum number of receive windows to support.
+
+        config LBM_CRYSTAL_ERROR_PPM
+            int "Crystal Error (PPM)"
+            range 1 50
+            default 10
+            help
+                Crystal oscillator error in parts per million.
+    endmenu
+
+    menu "NVS Configuration"
+        config LBM_SX127X_NVS_NAMESPACE
+            string "NVS namespace for modem context"
+            default "lbm_sx127x"
+            help
+                NVS namespace used to store modem context data.
+
+        config LBM_SX127X_NVS_ENABLE_ENCRYPTION
+            bool "Enable NVS encryption"
+            default n
+            help
+                Enable encryption for stored modem context data.
+    endmenu
+
+endmenu
