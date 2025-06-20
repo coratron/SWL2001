@@ -346,7 +346,7 @@ cleanup:
 /**
  * @brief Reset the SX127x radio (weak function - can be overridden)
  */
-__attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
+void sx127x_hal_reset(const sx127x_t *radio)
 {
 #ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
     ESP_LOGW(TAG, "Custom reset implementation should be provided. Using default fallback.");
@@ -393,12 +393,25 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
 
     ESP_LOGI(TAG, "Using reset GPIO: %d", ctx->reset_gpio);
 
+    // Call the GPIO reset function (can be overridden)
+    sx127x_hal_gpio_reset(ctx->reset_gpio);
+}
+
+/**
+ * @brief GPIO reset function (weak - can be overridden for custom GPIO implementations)
+ * This function handles the actual GPIO manipulation for reset.
+ * Override this function if you're using I2C GPIO expanders or other custom GPIO.
+ */
+__attribute__((weak)) void sx127x_hal_gpio_reset(gpio_num_t reset_gpio)
+{
+    ESP_LOGI(TAG, "Default GPIO reset using ESP32 GPIO %d", reset_gpio);
+
 #if defined(CONFIG_LBM_SX127X_RADIO_SX1272) || defined(SX1272)
     // SX1272: Set RESET pin to 1
-    gpio_set_level(ctx->reset_gpio, 1);
+    gpio_set_level(reset_gpio, 1);
 #elif defined(CONFIG_LBM_SX127X_RADIO_SX1276) || defined(SX1276)
     // SX1276: Set RESET pin to 0
-    gpio_set_level(ctx->reset_gpio, 0);
+    gpio_set_level(reset_gpio, 0);
 #endif
 
     // Wait 1 ms
@@ -408,7 +421,7 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT,
-        .pin_bit_mask = (1ULL << ctx->reset_gpio),
+        .pin_bit_mask = (1ULL << reset_gpio),
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
     };
