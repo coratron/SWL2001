@@ -104,15 +104,24 @@ sx127x_esp_err_t sx127x_esp_validate_config(const sx127x_esp_config_t *config)
         return SX127X_ESP_ERR_INVALID_ARG;
     }
 
-    // Validate GPIO pins
+    // Validate GPIO pins (skip reset_gpio validation if custom reset is enabled)
     if (config->miso_gpio >= GPIO_NUM_MAX || config->mosi_gpio >= GPIO_NUM_MAX ||
         config->sck_gpio >= GPIO_NUM_MAX || config->nss_gpio >= GPIO_NUM_MAX ||
-        config->reset_gpio >= GPIO_NUM_MAX || config->dio0_gpio >= GPIO_NUM_MAX ||
-        config->dio1_gpio >= GPIO_NUM_MAX || config->dio2_gpio >= GPIO_NUM_MAX)
+        config->dio0_gpio >= GPIO_NUM_MAX || config->dio1_gpio >= GPIO_NUM_MAX || 
+        config->dio2_gpio >= GPIO_NUM_MAX)
     {
         ESP_LOGE(TAG, "Invalid GPIO pin configuration");
         return SX127X_ESP_ERR_INVALID_ARG;
     }
+
+#ifndef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+    // Only validate reset GPIO if custom reset is not enabled
+    if (config->reset_gpio >= GPIO_NUM_MAX)
+    {
+        ESP_LOGE(TAG, "Invalid reset GPIO pin configuration");
+        return SX127X_ESP_ERR_INVALID_ARG;
+    }
+#endif
 
     return SX127X_ESP_OK;
 }
@@ -178,27 +187,41 @@ sx127x_esp_err_t sx127x_esp_gpio_init(sx127x_esp_context_t *ctx)
     ctx->nss_gpio = ctx->config.nss_gpio;
     ctx->reset_gpio = ctx->config.reset_gpio;
 
-    // Configure reset pin as output
-    gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_DISABLE,
-        .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = (1ULL << ctx->reset_gpio),
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-    };
-
-    ret = gpio_config(&io_conf);
-    if (ret != ESP_OK)
+    // Only configure reset pin if custom reset is not enabled
+#ifndef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
+    if (ctx->reset_gpio != GPIO_NUM_NC)
     {
-        ESP_LOGE(TAG, "Failed to configure reset GPIO: %s", esp_err_to_name(ret));
-        return SX127X_ESP_ERR_GPIO_INIT;
+        // Configure reset pin as output
+        gpio_config_t io_conf = {
+            .intr_type = GPIO_INTR_DISABLE,
+            .mode = GPIO_MODE_OUTPUT,
+            .pin_bit_mask = (1ULL << ctx->reset_gpio),
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+        };
+
+        ret = gpio_config(&io_conf);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to configure reset GPIO: %s", esp_err_to_name(ret));
+            return SX127X_ESP_ERR_GPIO_INIT;
+        }
+
+        // Set reset pin to inactive state
+        gpio_set_level(ctx->reset_gpio, 1);
+
+        ESP_LOGI(TAG, "GPIO initialized: Reset=%d, DIO0=%d, DIO1=%d, DIO2=%d",
+                 ctx->reset_gpio, ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
     }
-
-    // Set reset pin to inactive state
-    gpio_set_level(ctx->reset_gpio, 1);
-
-    ESP_LOGI(TAG, "GPIO initialized: Reset=%d, DIO0=%d, DIO1=%d, DIO2=%d",
-             ctx->reset_gpio, ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
+    else
+    {
+        ESP_LOGI(TAG, "GPIO initialized: Reset=NC (custom reset), DIO0=%d, DIO1=%d, DIO2=%d",
+                 ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
+    }
+#else
+    ESP_LOGI(TAG, "GPIO initialized: Reset=CUSTOM, DIO0=%d, DIO1=%d, DIO2=%d",
+             ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
+#endif
 
     return SX127X_ESP_OK;
 }

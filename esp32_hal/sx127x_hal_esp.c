@@ -27,6 +27,9 @@ static const char *TAG = "sx127x_hal_esp";
 // Global ISR service installation flag
 static bool s_isr_service_installed = false;
 
+// Forward declaration
+void sx127x_hal_gpio_reset(gpio_num_t reset_gpio);
+
 /**
  * @brief Get radio ID based on compile-time configuration
  */
@@ -39,6 +42,41 @@ sx127x_radio_id_t sx127x_hal_get_radio_id(const sx127x_t *radio)
 #else
 #error "Please define the radio type in Kconfig"
 #endif
+}
+
+/**
+ * @brief Install GPIO ISR service if not already installed
+ */
+static esp_err_t install_gpio_isr_service_safe(void)
+{
+    // Check if we've already handled ISR service installation
+    if (s_isr_service_installed)
+    {
+        ESP_LOGD(TAG, "GPIO ISR service already confirmed available");
+        return ESP_OK;
+    }
+
+    // Try to install ISR service - this will fail if already installed
+    esp_err_t ret = gpio_install_isr_service(CONFIG_LBM_SX127X_INTERRUPT_PRIORITY);
+    
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "GPIO ISR service installed successfully");
+        s_isr_service_installed = true;
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        // ISR service already installed by another component (board_support.cpp)
+        ESP_LOGI(TAG, "GPIO ISR service already installed by another component - using existing service");
+        s_isr_service_installed = true;
+        ret = ESP_OK;  // This is not an error for us
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(ret));
+    }
+    
+    return ret;
 }
 
 /**
@@ -76,25 +114,49 @@ void sx127x_hal_dio_irq_attach(const sx127x_t *radio)
         return;
     }
 
-    // Install ISR service if not already done
-    if (!s_isr_service_installed)
+    // Install ISR service in a thread-safe manner
+    ret = install_gpio_isr_service_safe();
+    if (ret != ESP_OK)
     {
-        ret = gpio_install_isr_service(CONFIG_LBM_SX127X_INTERRUPT_PRIORITY);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
-            return;
-        }
-        s_isr_service_installed = true;
+        ESP_LOGE(TAG, "Failed to ensure GPIO ISR service installation");
+        return;
     }
 
+    // Remove any existing handlers first to avoid conflicts
+    gpio_isr_handler_remove(ctx->dio_pins[0]);
+    gpio_isr_handler_remove(ctx->dio_pins[1]);
+    gpio_isr_handler_remove(ctx->dio_pins[2]);
+
     // Attach ISR handlers
-    gpio_isr_handler_add(ctx->dio_pins[0], sx127x_esp_dio0_isr, ctx);
-    gpio_isr_handler_add(ctx->dio_pins[1], sx127x_esp_dio1_isr, ctx);
-    gpio_isr_handler_add(ctx->dio_pins[2], sx127x_esp_dio2_isr, ctx);
+    ret = gpio_isr_handler_add(ctx->dio_pins[0], sx127x_esp_dio0_isr, ctx);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to add DIO0 ISR handler: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = gpio_isr_handler_add(ctx->dio_pins[1], sx127x_esp_dio1_isr, ctx);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to add DIO1 ISR handler: %s", esp_err_to_name(ret));
+        goto cleanup_dio0;
+    }
+
+    ret = gpio_isr_handler_add(ctx->dio_pins[2], sx127x_esp_dio2_isr, ctx);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to add DIO2 ISR handler: %s", esp_err_to_name(ret));
+        goto cleanup_dio1;
+    }
 
     ESP_LOGI(TAG, "DIO interrupts attached: DIO0=%d, DIO1=%d, DIO2=%d",
              ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
+    return;
+
+cleanup_dio1:
+    gpio_isr_handler_remove(ctx->dio_pins[1]);
+cleanup_dio0:
+    gpio_isr_handler_remove(ctx->dio_pins[0]);
 }
 
 /**
@@ -346,7 +408,7 @@ cleanup:
 /**
  * @brief Reset the SX127x radio (weak function - can be overridden)
  */
-__attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
+void sx127x_hal_reset(const sx127x_t *radio)
 {
 #ifdef CONFIG_LBM_SX127X_USE_CUSTOM_RESET
     ESP_LOGW(TAG, "Custom reset implementation should be provided. Using default fallback.");
@@ -393,12 +455,25 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
 
     ESP_LOGI(TAG, "Using reset GPIO: %d", ctx->reset_gpio);
 
+    // Call the GPIO reset function (can be overridden)
+    sx127x_hal_gpio_reset(ctx->reset_gpio);
+}
+
+/**
+ * @brief GPIO reset function (weak - can be overridden for custom GPIO implementations)
+ * This function handles the actual GPIO manipulation for reset.
+ * Override this function if you're using I2C GPIO expanders or other custom GPIO.
+ */
+__attribute__((weak)) void sx127x_hal_gpio_reset(gpio_num_t reset_gpio)
+{
+    ESP_LOGI(TAG, "Default GPIO reset using ESP32 GPIO %d", reset_gpio);
+
 #if defined(CONFIG_LBM_SX127X_RADIO_SX1272) || defined(SX1272)
     // SX1272: Set RESET pin to 1
-    gpio_set_level(ctx->reset_gpio, 1);
+    gpio_set_level(reset_gpio, 1);
 #elif defined(CONFIG_LBM_SX127X_RADIO_SX1276) || defined(SX1276)
     // SX1276: Set RESET pin to 0
-    gpio_set_level(ctx->reset_gpio, 0);
+    gpio_set_level(reset_gpio, 0);
 #endif
 
     // Wait 1 ms
@@ -408,7 +483,7 @@ __attribute__((weak)) void sx127x_hal_reset(const sx127x_t *radio)
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT,
-        .pin_bit_mask = (1ULL << ctx->reset_gpio),
+        .pin_bit_mask = (1ULL << reset_gpio),
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
     };
