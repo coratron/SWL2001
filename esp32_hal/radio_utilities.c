@@ -40,6 +40,7 @@
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
 
+#include "sdkconfig.h"
 #include "radio_utilities.h"
 
 /*
