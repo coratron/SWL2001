@@ -108,7 +108,7 @@ extern "C" {
 #define DTC_SUPPORTED_AU_915                (false)
 #define LBT_SUPPORTED_AU_915                (false)
 
-#define UPLINK_DWELL_TIME_AU_915            (true)
+#define UPLINK_DWELL_TIME_AU_915            (false)
 
 #define CF_LIST_SUPPORTED_AU_915            (CF_LIST_CH_MASK)
 
