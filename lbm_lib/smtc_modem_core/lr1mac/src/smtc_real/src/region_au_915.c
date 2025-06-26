@@ -372,7 +372,15 @@ status_lorawan_t region_au_915_get_join_next_channel( smtc_real_t* real, uint8_t
 status_lorawan_t region_au_915_get_next_channel( smtc_real_t* real, uint8_t tx_data_rate, uint32_t* out_tx_frequency,
                                                  uint32_t* out_rx1_frequency, uint8_t* active_channel_nb )
 {
-    // if all channels were used, reset the snapshots
+    // Band 2 specific reset logic - check if Bank 1 (125kHz channels 8-15) is exhausted
+    if( snapshot_channel_tx_mask[BANK_1_125_AU915] == 0 )
+    {
+        // Reset only Bank 1 channels (our Band 2 configuration)
+        snapshot_channel_tx_mask[BANK_1_125_AU915] = channel_index_enabled[BANK_1_125_AU915];
+        SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "Band 2: Reset snapshot mask for Bank 1 (channels 8-15)\n" );
+    }
+
+    // Original reset logic for full band configurations (keep for compatibility)
     if( ( SMTC_ARE_CLR_BYTE8( snapshot_channel_tx_mask, BANK_8_500_AU915 ) == true ) &&
         ( first_ch_mask_received == ch_mask_after_join_full ) )
     {
@@ -416,7 +424,8 @@ status_lorawan_t region_au_915_get_next_channel( smtc_real_t* real, uint8_t tx_d
     }
     if( *active_channel_nb == 0 )
     {
-        SMTC_MODEM_HAL_PANIC( "NO CHANNELS AVAILABLE\n" );
+        SMTC_MODEM_HAL_TRACE_WARNING( "NO CHANNELS AVAILABLE - attempting Band 2 recovery\n" );
+        return ERRORLORAWAN;  // Return error instead of panic for Band 2
     }
 
     uint8_t temp = ( smtc_modem_hal_get_random_nb_in_range( 0, ( *active_channel_nb - 1 ) ) ) % *active_channel_nb;
