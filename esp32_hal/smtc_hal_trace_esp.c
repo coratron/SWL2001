@@ -89,17 +89,37 @@ void hal_trace_print(const char *fmt, va_list argp)
 {
     char string[PRINT_BUFFER_SIZE];
     int len = vsnprintf(string, PRINT_BUFFER_SIZE, fmt, argp);
-    if (len > 0 && len < PRINT_BUFFER_SIZE)
+    
+    // Handle error case
+    if (len < 0)
+    {
+        ESP_LOGE(TAG, "vsnprintf error in hal_trace_print");
+        return;
+    }
+    
+    // Handle truncation case
+    if (len >= PRINT_BUFFER_SIZE)
+    {
+        // Ensure null termination
+        string[PRINT_BUFFER_SIZE - 1] = '\0';
+        // Remove newline if present at the end of truncated string
+        if (PRINT_BUFFER_SIZE > 1 && string[PRINT_BUFFER_SIZE - 2] == '\n')
+        {
+            string[PRINT_BUFFER_SIZE - 2] = '\0';
+        }
+        ESP_LOGW(TAG, "%s [TRUNCATED]", string);
+    }
+    else if (len > 0)
     {
         // Remove newline if present to avoid double newlines in ESP_LOG
-        if (len > 0 && string[len - 1] == '\n')
+        if (string[len - 1] == '\n')
         {
             string[len - 1] = '\0';
         }
-
         // Use ESP-IDF logging system
-        ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO, TAG, "%s", string);
+        ESP_LOGI(TAG, "%s", string);
     }
+    // len == 0 case (empty string) - do nothing
 }
 
 /*

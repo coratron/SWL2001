@@ -428,6 +428,12 @@ menu "LoRa Basics Modem SX127x Configuration"
             help
                 Enable debug tracing for radio operations.
 
+        config LBM_ENABLE_RADIO_PLANNER_TRACE
+            bool "Enable Radio Planner Debug Tracing"
+            default n
+            help
+                Enable debug tracing for radio planner operations (MODEM_HAL_DBG_TRACE_RP).
+
         config LBM_ENABLE_LR1MAC_TRACE
             bool "Enable LR1MAC Debug Tracing"
             default n

@@ -390,27 +390,19 @@ if(CONFIG_LBM_ENABLE_STORE_AND_FORWARD)
 endif()
 
 # Debug and Tracing Configuration
+# Main HAL debug traces (includes all standard trace functions)
 if(CONFIG_LBM_ENABLE_HAL_DBG_TRACE)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE 
-        ADD_SMTC_HAL_DBG_TRACE
-        SMTC_MODEM_HAL_DBG_TRACE_COLOR
-    )
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MODEM_HAL_DBG_TRACE=1)
 endif()
 
-if(CONFIG_LBM_ENABLE_MODEM_TRACE)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_MODEM_TRACE)
+# Radio Planner specific traces
+if(CONFIG_LBM_ENABLE_RADIO_PLANNER_TRACE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MODEM_HAL_DBG_TRACE_RP=1)
 endif()
 
-if(CONFIG_LBM_ENABLE_RADIO_TRACE)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_RADIO_TRACE)
-endif()
-
-if(CONFIG_LBM_ENABLE_LR1MAC_TRACE)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_LR1MAC_TRACE)
-endif()
-
-if(CONFIG_LBM_ENABLE_CRYPTO_TRACE)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ADD_CRYPTO_TRACE)
+# Deep debug traces (the other trace options all map to this since LBM doesn't have separate flags for them)
+if(CONFIG_LBM_ENABLE_MODEM_TRACE OR CONFIG_LBM_ENABLE_RADIO_TRACE OR CONFIG_LBM_ENABLE_LR1MAC_TRACE OR CONFIG_LBM_ENABLE_CRYPTO_TRACE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MODEM_HAL_DEEP_DBG_TRACE=1)
 endif()
 
 # Power Management Configuration

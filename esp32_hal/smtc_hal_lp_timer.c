@@ -45,6 +45,9 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 
+// Forward declaration for timing diagnostics
+extern uint32_t smtc_modem_hal_get_time_in_ms(void);
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE MACROS-----------------------------------------------------------
@@ -68,6 +71,10 @@ typedef struct
     hal_lp_timer_irq_t irq_context;
     bool initialized;
     bool running;
+    // Timing diagnostics for drift analysis
+    uint32_t start_time_lbm;
+    uint32_t start_time_esp;
+    uint32_t expected_duration_ms;
 } lp_timer_context_t;
 
 /*
@@ -108,7 +115,7 @@ void hal_lp_timer_init(hal_lp_timer_id_t id)
     const esp_timer_create_args_t timer_args = {
         .callback = timer_callback,
         .arg = &timers[id],
-        .dispatch_method = ESP_TIMER_TASK,
+        .dispatch_method = ESP_TIMER_TASK,  // Use task dispatch for better timing accuracy
         .name = (id == HAL_LP_TIMER_ID_1) ? "lbm_timer_1" : "lbm_timer_2",
         .skip_unhandled_events = false};
 
@@ -156,6 +163,11 @@ void hal_lp_timer_start(hal_lp_timer_id_t id, const uint32_t milliseconds, const
         memset(&timer->irq_context, 0, sizeof(hal_lp_timer_irq_t));
     }
 
+    // Store timing diagnostics for drift analysis
+    timer->start_time_lbm = smtc_modem_hal_get_time_in_ms();
+    timer->start_time_esp = esp_timer_get_time() / 1000;
+    timer->expected_duration_ms = milliseconds;
+
     uint64_t timeout_us = (uint64_t)milliseconds * 1000;
     esp_err_t err = esp_timer_start_once(timer->handle, timeout_us);
     if (err != ESP_OK)
@@ -165,7 +177,8 @@ void hal_lp_timer_start(hal_lp_timer_id_t id, const uint32_t milliseconds, const
     }
 
     timer->running = true;
-    ESP_LOGI(TAG, "Timer %d started for %u ms", id, milliseconds);
+    ESP_LOGI(TAG, "Timer %d started for %u ms at LBM_time=%lu ESP_time=%lu", 
+             id, milliseconds, timer->start_time_lbm, timer->start_time_esp);
 }
 
 void hal_lp_timer_stop(hal_lp_timer_id_t id)
@@ -225,6 +238,21 @@ static void timer_callback(void *arg)
     }
 
     timer->running = false;
+
+    // Calculate timing accuracy for debugging
+    uint32_t current_lbm_time = smtc_modem_hal_get_time_in_ms();
+    uint32_t current_esp_time = esp_timer_get_time() / 1000;
+    
+    uint32_t actual_duration_lbm = current_lbm_time - timer->start_time_lbm;
+    uint32_t actual_duration_esp = current_esp_time - timer->start_time_esp;
+    
+    int32_t lbm_error = (int32_t)actual_duration_lbm - (int32_t)timer->expected_duration_ms;
+    int32_t esp_error = (int32_t)actual_duration_esp - (int32_t)timer->expected_duration_ms;
+    int32_t clock_drift = (int32_t)actual_duration_lbm - (int32_t)actual_duration_esp;
+
+    ESP_LOGI(TAG, "Timer expired: Expected=%lu, LBM_actual=%lu (err=%ld), ESP_actual=%lu (err=%ld), drift=%ld ms", 
+             timer->expected_duration_ms, actual_duration_lbm, lbm_error, 
+             actual_duration_esp, esp_error, clock_drift);
 
     if (timer->irq_context.callback != NULL)
     {

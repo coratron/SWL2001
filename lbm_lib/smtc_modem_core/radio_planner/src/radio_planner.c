@@ -704,6 +704,8 @@ static void rp_task_arbiter( radio_planner_t* rp, const char* caller_func_name )
         // Execute the garbage collection if the radio isn't running
         if( rp->tasks[rp->radio_task_id].state != RP_TASK_STATE_RUNNING )
         {
+            // print it's due to garbage collection
+            SMTC_MODEM_HAL_RP_TRACE_PRINTF( " RP: Garbage collection - no task running\n" );
             rp_task_call_aborted( rp );
         }
 

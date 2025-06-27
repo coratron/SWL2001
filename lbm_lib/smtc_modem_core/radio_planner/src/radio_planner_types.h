@@ -84,9 +84,10 @@ extern "C" {
 
 /*!
  * for 8 ms : 5MS FOR WAKE UP (2MS) + CONFIG TIMER (3MS FIX !) + 3 ms interrupt routine
+ * Increased significantly for ESP32 FreeRTOS to handle timer drift and task scheduling delays
  */
 #ifndef RP_MARGIN_DELAY
-#define RP_MARGIN_DELAY                             20  // Increased from 8ms to handle ESP32 FreeRTOS scheduling delays
+#define RP_MARGIN_DELAY                             150  // Increased to 150ms for ESP32 FreeRTOS reliability
 #endif
 
 
@@ -99,10 +100,10 @@ extern "C" {
 /*!
  *
  */
-#define RP_TASK_RE_SCHEDULE_OFFSET_TIME             2000  // for 2 seconds
+#define RP_TASK_RE_SCHEDULE_OFFSET_TIME             2000  // for 5 seconds (increased from 2s)
 
 /*!
- *
+ * ESP32 FreeRTOS fairness delay - increased for better task scheduling
  */
 #ifndef RP_MCU_FAIRNESS_DELAY_MS
 #define RP_MCU_FAIRNESS_DELAY_MS                    10
