@@ -45,6 +45,15 @@
 
 #include "lr1mac_core.h"
 
+/*
+ * -----------------------------------------------------------------------------
+ * --- PRIVATE CONSTANTS -------------------------------------------------------
+ */
+
+#ifndef NUMBER_OF_STACKS
+#define NUMBER_OF_STACKS 1  // Default to single stack (matches CONFIG_LBM_NUMBER_OF_STACKS=1)
+#endif
+
 #include "smtc_duty_cycle.h"
 #if defined( ADD_CSMA )
 #include "smtc_lora_cad_bt.h"
@@ -992,6 +1001,48 @@ void lorawan_api_set_join_status( uint8_t stack_id, join_status_t join_status )
 {
     lr1mac_core_set_join_status( &lr1_mac_obj[stack_id], join_status );
 }
+
+bool lorawan_api_has_valid_session( uint8_t stack_id )
+{
+    PANIC_IF_STACK_ID_TOO_HIGH( stack_id );
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Calling lr1mac_core_session_is_valid for stack %d\n", stack_id );
+    bool result = lr1mac_core_session_is_valid( &lr1_mac_obj[stack_id] );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: lr1mac_core_session_is_valid returned %s\n", result ? "TRUE" : "FALSE" );
+    
+    if( result )
+    {
+        // Session is valid, now restore it to the LBM stack
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Restoring valid session for stack %d\n", stack_id );
+        status_lorawan_t restore_result = lr1mac_core_session_restore( &lr1_mac_obj[stack_id] );
+        if( restore_result == OKLORAWAN )
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Session successfully restored for stack %d\n", stack_id );
+            
+            // Log detailed session information
+            uint32_t dev_addr = lr1mac_core_devaddr_get( &lr1_mac_obj[stack_id] );
+            uint32_t fcnt_up = lr1mac_core_fcnt_up_get( &lr1_mac_obj[stack_id] );
+            smtc_real_region_types_t region = lr1mac_core_get_region( &lr1_mac_obj[stack_id] );
+            join_status_t join_status = lr1_mac_joined_status_get( &lr1_mac_obj[stack_id] );
+            
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Restored session details:\n" );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "  DevAddr: 0x%08X\n", dev_addr );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "  FCnt Up: %lu\n", fcnt_up );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "  Region: %d\n", region );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "  Join Status: %s\n", 
+                                       join_status == JOINED ? "JOINED" : 
+                                       join_status == JOINING ? "JOINING" : "NOT_JOINED" );
+        }
+        else
+        {
+            SMTC_MODEM_HAL_TRACE_WARNING( "SESSION DEBUG: Failed to restore session for stack %d\n", stack_id );
+            result = false; // If restore fails, consider session invalid
+        }
+    }
+    
+    return result;
+}
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE FUNCTIONS DEFINITION --------------------------------------------

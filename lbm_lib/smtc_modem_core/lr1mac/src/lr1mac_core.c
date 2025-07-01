@@ -1263,6 +1263,17 @@ static void lr1mac_mac_update( lr1_stack_mac_t* lr1_mac_obj )
             smtc_real_set_dr_distribution( lr1_mac_obj->real, lr1_mac_obj->adr_mode_select_tmp,
                                            &lr1_mac_obj->nb_trans );
             lr1mac_core_context_save( lr1_mac_obj );
+            
+            // 🔧 SESSION PRESERVATION: Save session context after successful join
+            status_lorawan_t session_save_result = lr1mac_core_session_save( lr1_mac_obj );
+            if( session_save_result == OKLORAWAN )
+            {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "Session context saved after successful join for stack %d\n", lr1_mac_obj->stack_id );
+            }
+            else
+            {
+                SMTC_MODEM_HAL_TRACE_WARNING( "Failed to save session context after join for stack %d\n", lr1_mac_obj->stack_id );
+            }
         }
         else
         {

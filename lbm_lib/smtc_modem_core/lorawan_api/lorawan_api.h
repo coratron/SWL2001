@@ -1071,6 +1071,15 @@ void lorawan_api_set_next_tx_at_time( uint8_t stack_id, bool is_send_at_time );
  * @param [in] join_status_t  join_status
  */
 void lorawan_api_set_join_status( uint8_t stack_id, join_status_t join_status );
+
+/**
+ * @brief Check if a valid LoRaWAN session exists for session preservation
+ *
+ * @param [in] stack_id Stack identifier
+ * @return true if valid session exists, false otherwise
+ */
+bool lorawan_api_has_valid_session( uint8_t stack_id );
+
 #ifdef __cplusplus
 }
 #endif

@@ -161,7 +161,24 @@ void modem_context_init_light( void ( *callback )( void ), radio_planner_t* rp )
         lorawan_api_init( rp, stack_id, ( void ( * )( lr1_stack_mac_down_data_t* ) ) modem_downlink_callback );
 
         lorawan_api_dr_strategy_set( STATIC_ADR_MODE, stack_id );
-        lorawan_api_join_status_clear( stack_id );
+        
+        // 🔧 SESSION PRESERVATION FIX: Check for valid session before clearing join status
+        // This prevents destroying valid session data during initialization
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Checking session validity for stack %d\n", stack_id );
+        bool has_valid_session = lorawan_api_has_valid_session( stack_id );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Session valid = %s for stack %d\n", has_valid_session ? "YES" : "NO", stack_id );
+        
+        if( !has_valid_session )
+        {
+            // Only clear join status if no valid session exists
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Clearing join status for stack %d (no valid session)\n", stack_id );
+            lorawan_api_join_status_clear( stack_id );
+        }
+        else
+        {
+            // Valid session detected - preserve it during initialization
+            SMTC_MODEM_HAL_TRACE_PRINTF( "Valid session detected for stack %d - preserving join status\n", stack_id );
+        }
 
         // to init duty cycle
         smtc_real_region_types_t region = lorawan_api_get_region( stack_id );
