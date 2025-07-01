@@ -45,6 +45,7 @@
 #include "smtc_real.h"
 #include "smtc_real_defs.h"
 #include "smtc_real_defs_str.h"
+#include "lorawan_session/lorawan_session_context.h"
 
 #include "lr1mac_config.h"
 
@@ -1332,6 +1333,181 @@ static void lr1mac_mac_update( lr1_stack_mac_t* lr1_mac_obj )
         lr1_mac_obj->lr1mac_state = LWPSTATE_IDLE;
     }
     lr1_mac_obj->valid_rx_packet = NO_MORE_VALID_RX_PACKET;
+}
+
+/**
+ * @brief Save LoRaWAN session context for fast recovery
+ */
+status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
+{
+    if( lr1_mac_obj == NULL )
+    {
+        return ERRORLORAWAN;
+    }
+    
+    // Only save if device is in joined state
+    if( lr1_mac_obj->join_status != JOINED )
+    {
+        return ERRORLORAWAN;
+    }
+    
+    lorawan_session_context_t session_ctx;
+    
+    // Initialize session context
+    lorawan_session_init_context( &session_ctx );
+    
+    // Extract critical session parameters from lr1_stack_mac_t
+    session_ctx.dev_addr = lr1_mac_obj->dev_addr;
+    session_ctx.activation_mode = lr1_mac_obj->activation_mode;
+    session_ctx.fcnt_up = lr1_mac_obj->fcnt_up;
+    session_ctx.fcnt_dwn = lr1_mac_obj->fcnt_dwn;
+    session_ctx.join_status = lr1_mac_obj->join_status;
+    
+    // ADR and MAC negotiated parameters
+    session_ctx.tx_data_rate = lr1_mac_obj->tx_data_rate;
+    session_ctx.tx_data_rate_adr = lr1_mac_obj->tx_data_rate_adr;
+    session_ctx.tx_power = lr1_mac_obj->tx_power;
+    session_ctx.nb_trans = lr1_mac_obj->nb_trans;
+    session_ctx.nb_available_tx_channel = lr1_mac_obj->nb_available_tx_channel;
+    
+    // RX parameters
+    session_ctx.rx2_data_rate = lr1_mac_obj->rx2_data_rate;
+    session_ctx.rx2_frequency = lr1_mac_obj->rx2_frequency;
+    session_ctx.rx1_dr_offset = lr1_mac_obj->rx1_dr_offset;
+    session_ctx.rx1_delay_s = lr1_mac_obj->rx1_delay_s;
+    
+    // Regional and duty cycle parameters
+    session_ctx.max_erp_dbm = lr1_mac_obj->max_erp_dbm;
+    session_ctx.max_duty_cycle_index = lr1_mac_obj->max_duty_cycle_index;
+    
+    // ADR configuration
+    session_ctx.adr_ack_cnt = lr1_mac_obj->adr_ack_cnt;
+    session_ctx.adr_ack_delay = lr1_mac_obj->adr_ack_delay;
+    session_ctx.adr_ack_limit = lr1_mac_obj->adr_ack_limit;
+    session_ctx.adr_enable = lr1_mac_obj->adr_enable;
+    
+    // Join information
+    session_ctx.dev_nonce = lr1_mac_obj->dev_nonce;
+    memcpy( session_ctx.join_nonce, lr1_mac_obj->join_nonce, sizeof(session_ctx.join_nonce) );
+    
+    // Network time
+    session_ctx.seconds_since_epoch = lr1_mac_obj->seconds_since_epoch;
+    session_ctx.fractional_second = lr1_mac_obj->fractional_second;
+    
+    // Class B parameters (if applicable)
+    session_ctx.beacon_freq_hz = lr1_mac_obj->beacon_freq_hz;
+    session_ctx.ping_slot_freq_hz = lr1_mac_obj->ping_slot_freq_hz;
+    session_ctx.ping_slot_dr = lr1_mac_obj->ping_slot_dr;
+    session_ctx.ping_slot_periodicity_ans = lr1_mac_obj->ping_slot_periodicity_ans;
+    
+    // Update metadata
+    session_ctx.last_save_timestamp = smtc_modem_hal_get_time_in_s();
+    session_ctx.save_counter++;
+    
+    // Calculate and set CRC
+    session_ctx.crc32 = lorawan_session_calculate_crc( &session_ctx );
+    
+    // Store using HAL context store mechanism
+    smtc_modem_hal_context_store( CONTEXT_LORAWAN_SESSION, 0, 
+                                  (const uint8_t*)&session_ctx, sizeof(session_ctx) );
+    
+    return OKLORAWAN;
+}
+
+/**
+ * @brief Restore LoRaWAN session context for fast recovery
+ */
+status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
+{
+    if( lr1_mac_obj == NULL )
+    {
+        return ERRORLORAWAN;
+    }
+    
+    lorawan_session_context_t session_ctx;
+    
+    // Retrieve session context from storage
+    smtc_modem_hal_context_restore( CONTEXT_LORAWAN_SESSION, 0, 
+                                    (uint8_t*)&session_ctx, sizeof(session_ctx) );
+    
+    // Validate the restored context
+    uint32_t current_time = smtc_modem_hal_get_time_in_s();
+    lorawan_session_validation_t validation = lorawan_session_validate_context( &session_ctx, current_time );
+    
+    if( validation != LORAWAN_SESSION_VALID )
+    {
+        // Session context is invalid, rejoin required
+        return ERRORLORAWAN;
+    }
+    
+    // Restore session parameters to lr1_stack_mac_t
+    lr1_mac_obj->dev_addr = session_ctx.dev_addr;
+    lr1_mac_obj->activation_mode = session_ctx.activation_mode;
+    lr1_mac_obj->fcnt_up = session_ctx.fcnt_up;
+    lr1_mac_obj->fcnt_dwn = session_ctx.fcnt_dwn;
+    lr1_mac_obj->join_status = session_ctx.join_status;
+    
+    // ADR and MAC negotiated parameters
+    lr1_mac_obj->tx_data_rate = session_ctx.tx_data_rate;
+    lr1_mac_obj->tx_data_rate_adr = session_ctx.tx_data_rate_adr;
+    lr1_mac_obj->tx_power = session_ctx.tx_power;
+    lr1_mac_obj->nb_trans = session_ctx.nb_trans;
+    lr1_mac_obj->nb_available_tx_channel = session_ctx.nb_available_tx_channel;
+    
+    // RX parameters
+    lr1_mac_obj->rx2_data_rate = session_ctx.rx2_data_rate;
+    lr1_mac_obj->rx2_frequency = session_ctx.rx2_frequency;
+    lr1_mac_obj->rx1_dr_offset = session_ctx.rx1_dr_offset;
+    lr1_mac_obj->rx1_delay_s = session_ctx.rx1_delay_s;
+    
+    // Regional and duty cycle parameters
+    lr1_mac_obj->max_erp_dbm = session_ctx.max_erp_dbm;
+    lr1_mac_obj->max_duty_cycle_index = session_ctx.max_duty_cycle_index;
+    
+    // ADR configuration
+    lr1_mac_obj->adr_ack_cnt = session_ctx.adr_ack_cnt;
+    lr1_mac_obj->adr_ack_delay = session_ctx.adr_ack_delay;
+    lr1_mac_obj->adr_ack_limit = session_ctx.adr_ack_limit;
+    lr1_mac_obj->adr_enable = session_ctx.adr_enable;
+    
+    // Join information
+    lr1_mac_obj->dev_nonce = session_ctx.dev_nonce;
+    memcpy( lr1_mac_obj->join_nonce, session_ctx.join_nonce, sizeof(lr1_mac_obj->join_nonce) );
+    
+    // Network time
+    lr1_mac_obj->seconds_since_epoch = session_ctx.seconds_since_epoch;
+    lr1_mac_obj->fractional_second = session_ctx.fractional_second;
+    
+    // Class B parameters (if applicable)
+    lr1_mac_obj->beacon_freq_hz = session_ctx.beacon_freq_hz;
+    lr1_mac_obj->ping_slot_freq_hz = session_ctx.ping_slot_freq_hz;
+    lr1_mac_obj->ping_slot_dr = session_ctx.ping_slot_dr;
+    lr1_mac_obj->ping_slot_periodicity_ans = session_ctx.ping_slot_periodicity_ans;
+    
+    return OKLORAWAN;
+}
+
+/**
+ * @brief Check if a valid session context exists in storage
+ */
+bool lr1mac_core_session_is_valid( lr1_stack_mac_t* lr1_mac_obj )
+{
+    if( lr1_mac_obj == NULL )
+    {
+        return false;
+    }
+    
+    lorawan_session_context_t session_ctx;
+    
+    // Retrieve session context from storage
+    smtc_modem_hal_context_restore( CONTEXT_LORAWAN_SESSION, 0, 
+                                    (uint8_t*)&session_ctx, sizeof(session_ctx) );
+    
+    // Validate the context
+    uint32_t current_time = smtc_modem_hal_get_time_in_s();
+    lorawan_session_validation_t validation = lorawan_session_validate_context( &session_ctx, current_time );
+    
+    return ( validation == LORAWAN_SESSION_VALID );
 }
 
 /* --- EOF ------------------------------------------------------------------ */

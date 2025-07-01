@@ -45,6 +45,7 @@
 
 #include "smtc_modem_hal.h"
 #include "smtc_hal_dbg_trace.h"
+#include "lorawan_session/lorawan_session_context.h"
 
 #include "smtc_hal_gpio.h"
 #include "smtc_hal_lp_timer.h"
@@ -91,6 +92,7 @@
 #define NVS_KEY_MODEM_KEY_CONTEXT "modem_key"
 #define NVS_KEY_LORAWAN_CONTEXT "lorawan_ctx"
 #define NVS_KEY_SECURE_ELEMENT_CONTEXT "se_ctx"
+#define NVS_KEY_LORAWAN_SESSION_CONTEXT "lbm_session"
 #define NVS_KEY_CRASHLOG "crashlog"
 #define NVS_KEY_CRASHLOG_STATUS "crash_stat"
 
@@ -115,6 +117,10 @@ RTC_DATA_ATTR static uint8_t crashlog_buff_rtc[CRASH_LOG_SIZE];
 RTC_DATA_ATTR static volatile uint8_t crashlog_length_rtc;
 RTC_DATA_ATTR static volatile bool crashlog_available_rtc;
 
+// LoRaWAN session context storage in RTC memory (fast access with battery backup)
+RTC_DATA_ATTR static lorawan_session_context_t session_context_rtc;
+RTC_DATA_ATTR static volatile bool session_context_valid_rtc;
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE FUNCTIONS DECLARATION -------------------------------------------
@@ -122,6 +128,10 @@ RTC_DATA_ATTR static volatile bool crashlog_available_rtc;
 
 static esp_err_t nvs_write_blob_safe(const char *key, const void *data, size_t length);
 static esp_err_t nvs_read_blob_safe(const char *key, void *data, size_t *length);
+static void session_context_store_to_rtc(const uint8_t *buffer, const uint32_t size);
+static void session_context_restore_from_rtc(uint8_t *buffer, const uint32_t size);
+static void session_context_sync_to_nvs(void);
+static void session_context_restore_from_nvs(void);
 
 /*
  * -----------------------------------------------------------------------------
@@ -222,6 +232,10 @@ void smtc_modem_hal_context_restore(const modem_context_type_t ctx_type, uint32_
         ESP_LOGW(TAG, "Store and Forward context restore not implemented");
         memset(buffer, 0, size);
         return;
+    case CONTEXT_LORAWAN_SESSION:
+        // Restore from RTC memory (primary) with NVS fallback
+        session_context_restore_from_rtc(buffer, size);
+        return;
     default:
         ESP_LOGE(TAG, "Unknown context type: %d", ctx_type);
         hal_mcu_panic();
@@ -263,6 +277,10 @@ void smtc_modem_hal_context_store(const modem_context_type_t ctx_type, uint32_t 
     case CONTEXT_STORE_AND_FORWARD:
         // Not implemented for ESP32 yet
         ESP_LOGW(TAG, "Store and Forward context store not implemented");
+        return;
+    case CONTEXT_LORAWAN_SESSION:
+        // Store to RTC memory (primary) and sync to NVS (backup)
+        session_context_store_to_rtc(buffer, size);
         return;
     default:
         ESP_LOGE(TAG, "Unknown context type: %d", ctx_type);
@@ -555,6 +573,161 @@ static esp_err_t nvs_read_blob_safe(const char *key, void *data, size_t *length)
     err = nvs_get_blob(nvs_handle, key, data, length);
     nvs_close(nvs_handle);
     return err;
+}
+
+/*
+ * -----------------------------------------------------------------------------
+ * --- SESSION CONTEXT HELPER FUNCTIONS ---------------------------------------
+ */
+
+static void session_context_store_to_rtc(const uint8_t *buffer, const uint32_t size)
+{
+    if (buffer == NULL || size != sizeof(lorawan_session_context_t))
+    {
+        ESP_LOGE(TAG, "Invalid session context data (size: %lu, expected: %zu)", 
+                 size, sizeof(lorawan_session_context_t));
+        return;
+    }
+    
+    // Copy data to RTC memory
+    memcpy(&session_context_rtc, buffer, sizeof(lorawan_session_context_t));
+    
+    // Validate the context
+    uint32_t current_time = smtc_modem_hal_get_time_in_s();
+    lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+    
+    if (validation == LORAWAN_SESSION_VALID)
+    {
+        session_context_valid_rtc = true;
+        ESP_LOGI(TAG, "Session context stored to RTC memory (valid)");
+        
+        // Periodically sync to NVS for backup (every 10 saves or on join status change)
+        static uint32_t save_counter = 0;
+        static join_status_t last_join_status = NOT_JOINED;
+        
+        save_counter++;
+        if (save_counter >= 10 || session_context_rtc.join_status != last_join_status)
+        {
+            session_context_sync_to_nvs();
+            save_counter = 0;
+            last_join_status = session_context_rtc.join_status;
+        }
+    }
+    else
+    {
+        session_context_valid_rtc = false;
+        ESP_LOGW(TAG, "Session context stored but validation failed: %d", validation);
+    }
+}
+
+static void session_context_restore_from_rtc(uint8_t *buffer, const uint32_t size)
+{
+    if (buffer == NULL || size != sizeof(lorawan_session_context_t))
+    {
+        ESP_LOGE(TAG, "Invalid session context buffer (size: %lu, expected: %zu)", 
+                 size, sizeof(lorawan_session_context_t));
+        memset(buffer, 0, size);
+        return;
+    }
+    
+    // Check if RTC memory contains valid session data
+    if (session_context_valid_rtc)
+    {
+        uint32_t current_time = smtc_modem_hal_get_time_in_s();
+        lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+        
+        if (validation == LORAWAN_SESSION_VALID)
+        {
+            // RTC memory context is valid, use it
+            memcpy(buffer, &session_context_rtc, sizeof(lorawan_session_context_t));
+            ESP_LOGI(TAG, "Session context restored from RTC memory");
+            return;
+        }
+        else
+        {
+            ESP_LOGW(TAG, "RTC session context invalid: %d, trying NVS backup", validation);
+        }
+    }
+    
+    // RTC memory is invalid or corrupted, try NVS backup
+    session_context_restore_from_nvs();
+    
+    // Check if NVS restore was successful
+    if (session_context_valid_rtc)
+    {
+        uint32_t current_time = smtc_modem_hal_get_time_in_s();
+        lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+        
+        if (validation == LORAWAN_SESSION_VALID)
+        {
+            memcpy(buffer, &session_context_rtc, sizeof(lorawan_session_context_t));
+            ESP_LOGI(TAG, "Session context restored from NVS backup");
+            return;
+        }
+    }
+    
+    // Both RTC and NVS failed, return default context
+    ESP_LOGW(TAG, "Session context restore failed, returning default context");
+    lorawan_session_init_context((lorawan_session_context_t*)buffer);
+}
+
+static void session_context_sync_to_nvs(void)
+{
+    if (!session_context_valid_rtc)
+    {
+        ESP_LOGW(TAG, "Cannot sync invalid session context to NVS");
+        return;
+    }
+    
+    // Update timestamp before saving to NVS
+    session_context_rtc.last_save_timestamp = smtc_modem_hal_get_time_in_s();
+    session_context_rtc.save_counter++;
+    
+    // Recalculate CRC
+    session_context_rtc.crc32 = lorawan_session_calculate_crc(&session_context_rtc);
+    
+    esp_err_t err = nvs_write_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
+                                        &session_context_rtc, sizeof(lorawan_session_context_t));
+    if (err == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Session context synced to NVS backup");
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to sync session context to NVS: %s", esp_err_to_name(err));
+    }
+}
+
+static void session_context_restore_from_nvs(void)
+{
+    size_t actual_size = sizeof(lorawan_session_context_t);
+    esp_err_t err = nvs_read_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
+                                       &session_context_rtc, &actual_size);
+    
+    if (err == ESP_OK && actual_size == sizeof(lorawan_session_context_t))
+    {
+        uint32_t current_time = smtc_modem_hal_get_time_in_s();
+        lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+        
+        if (validation == LORAWAN_SESSION_VALID)
+        {
+            session_context_valid_rtc = true;
+            ESP_LOGI(TAG, "Session context restored from NVS backup");
+        }
+        else
+        {
+            session_context_valid_rtc = false;
+            ESP_LOGW(TAG, "NVS session context validation failed: %d", validation);
+        }
+    }
+    else
+    {
+        session_context_valid_rtc = false;
+        ESP_LOGW(TAG, "Failed to restore session context from NVS: %s", esp_err_to_name(err));
+        
+        // Initialize with default values
+        lorawan_session_init_context(&session_context_rtc);
+    }
 }
 
 /* --- EOF ------------------------------------------------------------------ */

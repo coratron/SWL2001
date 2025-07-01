@@ -668,4 +668,39 @@ void lr1mac_core_set_next_tx_at_time(  lr1_stack_mac_t* lr1_mac_obj, bool is_sen
  * @param [in] join_status_t join_status
  */
 void lr1mac_core_set_join_status( lr1_stack_mac_t* lr1_mac_obj, join_status_t join_status );
+
+/**
+ * @brief Save LoRaWAN session context for fast recovery after reset/deep sleep
+ *
+ * @remark Extracts critical session parameters from lr1_stack_mac_t and saves them
+ *         using the HAL context store mechanism with hybrid RTC/NVS storage
+ *
+ * @param [in] lr1_mac_obj The lr1mac object containing current session state
+ * @return status_lorawan_t Status of the save operation
+ */
+status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj );
+
+/**
+ * @brief Restore LoRaWAN session context for fast recovery after reset/deep sleep
+ *
+ * @remark Retrieves session parameters from storage and applies them to lr1_stack_mac_t
+ *         to restore the previous session state without requiring a rejoin
+ *
+ * @param [in] lr1_mac_obj The lr1mac object to restore session state into
+ * @return status_lorawan_t Status of the restore operation:
+ *                          - OKLORAWAN if session restored successfully
+ *                          - ERRORLORAWAN if no valid session found (rejoin required)
+ */
+status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj );
+
+/**
+ * @brief Check if a valid session context exists in storage
+ *
+ * @remark Validates stored session context without actually restoring it
+ *
+ * @param [in] lr1_mac_obj The lr1mac object (used for timing validation)
+ * @return bool True if valid session context exists, false otherwise
+ */
+bool lr1mac_core_session_is_valid( lr1_stack_mac_t* lr1_mac_obj );
+
 #endif
