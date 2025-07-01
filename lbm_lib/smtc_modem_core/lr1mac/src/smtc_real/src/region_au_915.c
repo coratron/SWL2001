@@ -498,41 +498,72 @@ void region_au_915_init_after_join_snapshot_channel_mask( smtc_real_t* real, uin
     lr1mac_bandwidth_t tx_bw = BW125;
     region_au_915_lora_dr_to_sf_bw( tx_data_rate, &tx_sf, &tx_bw );
 
-    /**
-     * Important remark:
-     *
-     * In case of BW125, search the corresponding "block" of channels used by the last Tx frequency
-     * In case of BW500, Search the corresponding "channel" used by the last Tx frequency
-     *
-     * For each 125KHz block there is a corresponding 500KHs channels.
-     * So for example if we are in BW500 and found the channel number 2, the corresponding 125Khz block is also the
-     * number 2
-     *
-     */
-    if( tx_bw == BW125 )
+    // CRITICAL BUG FIX: Validate tx_frequency before calculation to prevent invalid block numbers
+    if( tx_frequency < DEFAULT_TX_FREQ_125_START_AU_915 || tx_frequency > DEFAULT_TX_FREQ_125_START_AU_915 + (64 * DEFAULT_TX_STEP_125_AU_915) )
     {
-        // Search the corresponding block of channels used by the last Tx frequency
-        ch_mask_block =
-            ( au_915_channels_bank_t ) ( ( tx_frequency - DEFAULT_TX_FREQ_125_START_AU_915 ) /
-                                         ( ( DEFAULT_TX_STEP_125_AU_915
-                                             << 3 ) ) );  // 1600000 = 8 ch * 200000 MHz, the gap in each block
-    }
-    else if( tx_bw == BW500 )
-    {
-        ch_mask_block = ( au_915_channels_bank_t ) ( ( ( tx_frequency - DEFAULT_TX_FREQ_500_START_AU_915 ) /
-                                                       DEFAULT_TX_STEP_500_AU_915 ) %
-                                                     8 );
+        SMTC_MODEM_HAL_TRACE_ERROR( "AU915 BUG FIX: Invalid TX frequency %lu Hz, using default Bank 1\n", tx_frequency );
+        // Use safe default - Bank 1 (channels 8-15)
+        ch_mask_block = BANK_1_125_AU915;
     }
     else
     {
-        SMTC_MODEM_HAL_PANIC( "invalid BW %d", tx_bw );
+        /**
+         * Important remark:
+         *
+         * In case of BW125, search the corresponding "block" of channels used by the last Tx frequency
+         * In case of BW500, Search the corresponding "channel" used by the last Tx frequency
+         *
+         * For each 125KHz block there is a corresponding 500KHs channels.
+         * So for example if we are in BW500 and found the channel number 2, the corresponding 125Khz block is also the
+         * number 2
+         *
+         */
+        if( tx_bw == BW125 )
+        {
+            // Search the corresponding block of channels used by the last Tx frequency
+            uint32_t frequency_offset = tx_frequency - DEFAULT_TX_FREQ_125_START_AU_915;
+            uint32_t block_size = DEFAULT_TX_STEP_125_AU_915 << 3;  // 1600000 = 8 ch * 200000 MHz
+            
+            // CRITICAL BUG FIX: Add bounds checking to prevent overflow
+            if( frequency_offset >= (8 * block_size) )
+            {
+                SMTC_MODEM_HAL_TRACE_ERROR( "AU915 BUG FIX: Frequency offset %lu too large, using Bank 1\n", frequency_offset );
+                ch_mask_block = BANK_1_125_AU915;
+            }
+            else
+            {
+                ch_mask_block = ( au_915_channels_bank_t ) ( frequency_offset / block_size );
+            }
+        }
+        else if( tx_bw == BW500 )
+        {
+            uint32_t frequency_offset = tx_frequency - DEFAULT_TX_FREQ_500_START_AU_915;
+            
+            // CRITICAL BUG FIX: Add bounds checking for 500kHz channels
+            if( frequency_offset >= (8 * DEFAULT_TX_STEP_500_AU_915) )
+            {
+                SMTC_MODEM_HAL_TRACE_ERROR( "AU915 BUG FIX: 500kHz frequency offset %lu too large, using Bank 0\n", frequency_offset );
+                ch_mask_block = BANK_0_125_AU915;
+            }
+            else
+            {
+                ch_mask_block = ( au_915_channels_bank_t ) ( ( frequency_offset / DEFAULT_TX_STEP_500_AU_915 ) % 8 );
+            }
+        }
+        else
+        {
+            SMTC_MODEM_HAL_PANIC( "invalid BW %d", tx_bw );
+        }
     }
 
-    // Block are defined from 0 to 8
+    // CRITICAL BUG FIX: Double-check block is valid before using it
     if( ch_mask_block >= BANK_MAX_AU915 )
     {
-        SMTC_MODEM_HAL_PANIC( "frequency block out of range %d\n", ch_mask_block );
+        SMTC_MODEM_HAL_TRACE_ERROR( "AU915 BUG FIX: Calculated block %d out of range, using Bank 1\n", ch_mask_block );
+        ch_mask_block = BANK_1_125_AU915;  // Use safe default instead of panic
     }
+
+    SMTC_MODEM_HAL_TRACE_PRINTF_DEBUG( "AU915 BUG FIX: Using channel mask block %d for frequency %lu Hz\n", ch_mask_block, tx_frequency );
 
     if( first_ch_mask_received == ch_mask_after_join_init )
     {
