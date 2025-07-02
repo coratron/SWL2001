@@ -422,6 +422,21 @@ void smtc_modem_hal_crashlog_set_status( bool available );
  */
 bool smtc_modem_hal_crashlog_get_status( void );
 
+/* ------------ Session management ------------*/
+
+/**
+ * @brief Determines if LoRaWAN session should be preserved during modem initialization
+ *
+ * @remark This function allows platform-specific logic to control whether existing
+ *         LoRaWAN session data should be preserved or cleared during modem startup.
+ *         Typically, sessions should be preserved only for low-power wake-ups where
+ *         network connectivity is expected to continue, and cleared for hard resets
+ *         where a fresh join sequence is preferred.
+ *
+ * @return bool True if session should be preserved, false if fresh join is required
+ */
+bool smtc_modem_hal_should_preserve_session( void );
+
 /* ------------ Needed for Store and Forward service  ------------*/
 
 /**

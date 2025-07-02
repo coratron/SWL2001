@@ -1212,6 +1212,15 @@ void lr1_stack_mac_update( lr1_stack_mac_t* lr1_mac )
         lr1_mac->nb_trans_cpt = 1;  // error case shouldn't exist
         lr1_mac->fcnt_up++;
         lr1_mac->adr_ack_cnt++;  // increment adr counter each new uplink frame
+        
+        // 🔧 SESSION PERSISTENCE: Save session after frame counter increment
+        // This ensures frame counters are persisted immediately after transmission
+        extern status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj );
+        status_lorawan_t session_save_result = lr1mac_core_session_save( lr1_mac );
+        if( session_save_result != OKLORAWAN )
+        {
+            SMTC_MODEM_HAL_TRACE_WARNING( "Failed to save session after frame counter increment for stack %d\n", lr1_mac->stack_id );
+        }
     }
     else
     {

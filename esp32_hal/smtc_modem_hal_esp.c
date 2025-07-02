@@ -730,4 +730,32 @@ static void session_context_restore_from_nvs(void)
     }
 }
 
+/* ------------ Session management ------------*/
+
+bool smtc_modem_hal_should_preserve_session(void)
+{
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    
+    ESP_LOGI(TAG, "Reset reason check for session preservation: %d (%s)", reset_reason,
+             reset_reason == ESP_RST_POWERON ? "POWER_ON" :
+             reset_reason == ESP_RST_EXT ? "EXTERNAL_RESET" :
+             reset_reason == ESP_RST_SW ? "SOFTWARE_RESET" :
+             reset_reason == ESP_RST_PANIC ? "PANIC_RESET" :
+             reset_reason == ESP_RST_INT_WDT ? "INTERRUPT_WDT" :
+             reset_reason == ESP_RST_TASK_WDT ? "TASK_WDT" :
+             reset_reason == ESP_RST_WDT ? "OTHER_WDT" :
+             reset_reason == ESP_RST_DEEPSLEEP ? "DEEP_SLEEP_WAKEUP" :
+             reset_reason == ESP_RST_BROWNOUT ? "BROWNOUT" :
+             reset_reason == ESP_RST_SDIO ? "SDIO" :
+             "UNKNOWN");
+    
+    // Only preserve session on deep sleep wakeup
+    // All other reset types (power-on, software reset, crash, etc.) should start fresh
+    bool should_preserve = (reset_reason == ESP_RST_DEEPSLEEP);
+    
+    ESP_LOGI(TAG, "Session preservation decision: %s", should_preserve ? "PRESERVE" : "FRESH_JOIN");
+    
+    return should_preserve;
+}
+
 /* --- EOF ------------------------------------------------------------------ */

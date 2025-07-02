@@ -46,6 +46,7 @@
 #include "smtc_real_defs.h"
 #include "smtc_real_defs_str.h"
 #include "lorawan_session/lorawan_session_context.h"
+#include "smtc_modem_crypto/smtc_secure_element/smtc_secure_element.h"
 
 #include "lr1mac_config.h"
 
@@ -163,6 +164,34 @@ void lr1mac_core_init( lr1_stack_mac_t* lr1_mac_obj, smtc_real_t* real, radio_pl
     if( lr1_mac_obj->is_lorawan_modem_certification_enabled == true )
     {
         lr1_mac_obj->is_join_duty_cycle_backoff_bypass_enabled = true;
+    }
+
+    // 🔧 SESSION PERSISTENCE FIX: Restore session AFTER region config to prevent overwrites
+    // Region config resets some ADR parameters, so we need to restore session after it
+    if( smtc_modem_hal_should_preserve_session() )
+    {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Attempting session restore after region config\n" );
+        status_lorawan_t session_status = lr1mac_core_session_restore( lr1_mac_obj );
+        
+        if( session_status == OKLORAWAN )
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Session successfully restored after region config\n" );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Restored FCnt Up: %lu, FCnt Dwn: %lu\n", 
+                                         lr1_mac_obj->fcnt_up, lr1_mac_obj->fcnt_dwn );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: ADR State - Enabled: %s, ACK Count: %d\n",
+                                         lr1_mac_obj->adr_enable ? "YES" : "NO", lr1_mac_obj->adr_ack_cnt );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Data Rates - Current: %d, ADR: %d\n",
+                                         lr1_mac_obj->tx_data_rate, lr1_mac_obj->tx_data_rate_adr );
+        }
+        else
+        {
+            SMTC_MODEM_HAL_TRACE_WARNING( "SESSION DEBUG: Session restore failed after region config\n" );
+            // Continue with normal initialization - not a fatal error
+        }
+    }
+    else
+    {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Platform requests fresh join - skipping session restore\n" );
     }
 
     SMTC_MODEM_HAL_TRACE_PRINTF( "stack_id %u\n", lr1_mac_obj->stack_id );
@@ -1374,6 +1403,12 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     session_ctx.fcnt_dwn = lr1_mac_obj->fcnt_dwn;
     session_ctx.join_status = lr1_mac_obj->join_status;
     
+    // 🔍 DEBUG: Log what we're saving
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION SAVE DEBUG: DevAddr=0x%08lX, FCnt Up=%lu, FCnt Dwn=%lu\n",
+                                 session_ctx.dev_addr, session_ctx.fcnt_up, session_ctx.fcnt_dwn );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION SAVE DEBUG: ADR=%s, Join Status=%d\n",
+                                 session_ctx.adr_enable ? "YES" : "NO", session_ctx.join_status );
+    
     // ADR and MAC negotiated parameters
     session_ctx.tx_data_rate = lr1_mac_obj->tx_data_rate;
     session_ctx.tx_data_rate_adr = lr1_mac_obj->tx_data_rate_adr;
@@ -1422,6 +1457,17 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     smtc_modem_hal_context_store( CONTEXT_LORAWAN_SESSION, 0, 
                                   (const uint8_t*)&session_ctx, sizeof(session_ctx) );
     
+    // 🔑 CRITICAL: Also save secure element context to persist session keys
+    // Session keys (NwkSKey, AppSKey) are managed by the secure element
+    // and must be saved alongside our session context for complete persistence
+    smtc_se_return_code_t se_store_result = smtc_secure_element_store_context( lr1_mac_obj->stack_id );
+    if( se_store_result != SMTC_SE_RC_SUCCESS )
+    {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION KEYS WARNING: Secure element store failed with code %d\n", se_store_result );
+    }
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION KEYS: Secure element context saved for session persistence\n" );
+    
     return OKLORAWAN;
 }
 
@@ -1450,6 +1496,12 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
         // Session context is invalid, rejoin required
         return ERRORLORAWAN;
     }
+    
+    // 🔍 DEBUG: Log what we're restoring
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION RESTORE DEBUG: DevAddr=0x%08lX, FCnt Up=%lu, FCnt Dwn=%lu\n",
+                                 session_ctx.dev_addr, session_ctx.fcnt_up, session_ctx.fcnt_dwn );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION RESTORE DEBUG: ADR=%s, Join Status=%d\n",
+                                 session_ctx.adr_enable ? "YES" : "NO", session_ctx.join_status );
     
     // Restore session parameters to lr1_stack_mac_t
     lr1_mac_obj->dev_addr = session_ctx.dev_addr;
@@ -1494,6 +1546,17 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     lr1_mac_obj->ping_slot_freq_hz = session_ctx.ping_slot_freq_hz;
     lr1_mac_obj->ping_slot_dr = session_ctx.ping_slot_dr;
     lr1_mac_obj->ping_slot_periodicity_ans = session_ctx.ping_slot_periodicity_ans;
+    
+    // 🔑 CRITICAL: Also restore secure element context to restore session keys
+    // Session keys (NwkSKey, AppSKey) are managed by the secure element
+    // and must be restored alongside our session context for complete persistence
+    smtc_se_return_code_t se_restore_result = smtc_secure_element_restore_context( lr1_mac_obj->stack_id );
+    if( se_restore_result != SMTC_SE_RC_SUCCESS )
+    {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION KEYS WARNING: Secure element restore failed with code %d\n", se_restore_result );
+    }
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION KEYS: Secure element context restored for session persistence\n" );
     
     return OKLORAWAN;
 }

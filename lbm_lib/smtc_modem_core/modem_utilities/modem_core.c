@@ -44,6 +44,7 @@
 #include "modem_event_utilities.h"
 
 #include "smtc_modem_hal_dbg_trace.h"
+#include "smtc_modem_hal.h"
 #include "smtc_real.h"
 #include "lorawan_api.h"
 #include "smtc_modem_api.h"
@@ -162,22 +163,27 @@ void modem_context_init_light( void ( *callback )( void ), radio_planner_t* rp )
 
         lorawan_api_dr_strategy_set( STATIC_ADR_MODE, stack_id );
         
-        // 🔧 SESSION PRESERVATION FIX: Check for valid session before clearing join status
-        // This prevents destroying valid session data during initialization
-        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Checking session validity for stack %d\n", stack_id );
+        // 🔧 SESSION PRESERVATION FIX: Use platform-specific logic to determine session preservation
+        // This allows different platforms to implement their own reset reason logic
+        bool should_preserve_session = smtc_modem_hal_should_preserve_session();
         bool has_valid_session = lorawan_api_has_valid_session( stack_id );
-        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Session valid = %s for stack %d\n", has_valid_session ? "YES" : "NO", stack_id );
         
-        if( !has_valid_session )
+        SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Platform decision = %s, Session valid = %s for stack %d\n", 
+                                     should_preserve_session ? "PRESERVE" : "FRESH_JOIN",
+                                     has_valid_session ? "YES" : "NO", 
+                                     stack_id );
+        
+        if( should_preserve_session && has_valid_session )
         {
-            // Only clear join status if no valid session exists
-            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Clearing join status for stack %d (no valid session)\n", stack_id );
-            lorawan_api_join_status_clear( stack_id );
+            // Platform wants to preserve session AND valid session exists - keep it
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Preserving valid session for stack %d\n", stack_id );
         }
         else
         {
-            // Valid session detected - preserve it during initialization
-            SMTC_MODEM_HAL_TRACE_PRINTF( "Valid session detected for stack %d - preserving join status\n", stack_id );
+            // Either platform wants fresh join OR no valid session exists - clear join status
+            const char* reason = !should_preserve_session ? "platform requests fresh join" : "no valid session";
+            SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION DEBUG: Clearing join status for stack %d (%s)\n", stack_id, reason );
+            lorawan_api_join_status_clear( stack_id );
         }
 
         // to init duty cycle
