@@ -532,6 +532,24 @@ menu "LoRa Basics Modem SX127x Configuration"
             default 10
             help
                 Crystal oscillator error in parts per million.
+
+        config LBM_ENABLE_NETWORK_TIME_SYNC
+            bool "Enable Network Time Synchronization"
+            default y
+            help
+                Enable periodic network time synchronization requests.
+                This helps maintain accurate device time for time-sensitive applications.
+                Note: May be disabled automatically for certain regions if known issues exist.
+
+        config LBM_NETWORK_TIME_SYNC_INTERVAL_HOURS
+            int "Network Time Sync Interval (hours)"
+            depends on LBM_ENABLE_NETWORK_TIME_SYNC
+            range 1 168
+            default 6
+            help
+                Interval between network time synchronization requests in hours.
+                Recommended values: 6-24 hours for most applications.
+                Lower values provide better time accuracy but increase network traffic.
     endmenu
 
     menu "NVS Configuration"
