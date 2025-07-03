@@ -747,7 +747,11 @@ status_lorawan_t lr1mac_core_dr_strategy_set( lr1_stack_mac_t* lr1_mac_obj, dr_s
     }
     else
     {
+        // 🔍 CRITICAL DEBUG: ADR mode change may override session-restored TX power!
+        int8_t old_tx_power = lr1_mac_obj->tx_power;
         lr1_mac_obj->tx_power = smtc_real_get_default_max_eirp( lr1_mac_obj->real );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "ADR STRATEGY: TxPower %d -> %d (mode=%d, default_max_eirp)\n",
+                                     old_tx_power, lr1_mac_obj->tx_power, adr_mode_select );
     }
 
     smtc_real_set_dr_distribution( lr1_mac_obj->real, adr_mode_select, &lr1_mac_obj->nb_trans );
@@ -1414,6 +1418,11 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     session_ctx.tx_data_rate_adr = lr1_mac_obj->tx_data_rate_adr;
     session_ctx.tx_power = lr1_mac_obj->tx_power;
     session_ctx.nb_trans = lr1_mac_obj->nb_trans;
+    
+    // 🔍 MAC PARAMS DEBUG: Log critical MAC parameters being saved
+    SMTC_MODEM_HAL_TRACE_PRINTF( "MAC SAVE: TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
+                                 session_ctx.tx_power, session_ctx.tx_data_rate, 
+                                 session_ctx.tx_data_rate_adr, session_ctx.nb_trans );
     session_ctx.nb_available_tx_channel = lr1_mac_obj->nb_available_tx_channel;
     
     // RX parameters
@@ -1503,6 +1512,11 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION RESTORE DEBUG: ADR=%s, Join Status=%d\n",
                                  session_ctx.adr_enable ? "YES" : "NO", session_ctx.join_status );
     
+    // 🔍 MAC PARAMS DEBUG: Log critical MAC parameters being restored
+    SMTC_MODEM_HAL_TRACE_PRINTF( "MAC RESTORE: TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
+                                 session_ctx.tx_power, session_ctx.tx_data_rate, 
+                                 session_ctx.tx_data_rate_adr, session_ctx.nb_trans );
+    
     // Restore session parameters to lr1_stack_mac_t
     lr1_mac_obj->dev_addr = session_ctx.dev_addr;
     lr1_mac_obj->activation_mode = session_ctx.activation_mode;
@@ -1516,6 +1530,11 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     lr1_mac_obj->tx_power = session_ctx.tx_power;
     lr1_mac_obj->nb_trans = session_ctx.nb_trans;
     lr1_mac_obj->nb_available_tx_channel = session_ctx.nb_available_tx_channel;
+    
+    // 🔍 MAC RESTORE VERIFICATION: Confirm MAC parameters are set in lr1_mac_obj
+    SMTC_MODEM_HAL_TRACE_PRINTF( "MAC RESTORED TO STACK: TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
+                                 lr1_mac_obj->tx_power, lr1_mac_obj->tx_data_rate, 
+                                 lr1_mac_obj->tx_data_rate_adr, lr1_mac_obj->nb_trans );
     
     // RX parameters
     lr1_mac_obj->rx2_data_rate = session_ctx.rx2_data_rate;
@@ -1557,6 +1576,28 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     }
     
     SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION KEYS: Secure element context restored for session persistence\n" );
+    
+    // 🔧 MAC PARAMETER PROTECTION: Store critical MAC parameters that must be preserved
+    // These values could be overwritten by subsequent region config or ADR operations
+    int8_t preserved_tx_power = session_ctx.tx_power;
+    uint8_t preserved_tx_data_rate = session_ctx.tx_data_rate;
+    uint8_t preserved_tx_data_rate_adr = session_ctx.tx_data_rate_adr;
+    uint8_t preserved_nb_trans = session_ctx.nb_trans;
+    int8_t preserved_max_erp_dbm = session_ctx.max_erp_dbm;
+    
+    // Note: Any potential overwrites from region config should be completed by now
+    
+    // 🔧 FORCE RE-APPLICATION: Re-apply critical MAC parameters to ensure they persist
+    // This counteracts any overwrites from region config or other initialization
+    lr1_mac_obj->tx_power = preserved_tx_power;
+    lr1_mac_obj->tx_data_rate = preserved_tx_data_rate;
+    lr1_mac_obj->tx_data_rate_adr = preserved_tx_data_rate_adr;
+    lr1_mac_obj->nb_trans = preserved_nb_trans;
+    lr1_mac_obj->max_erp_dbm = preserved_max_erp_dbm;
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "MAC PROTECTION: Final MAC parameters enforced - TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
+                                 lr1_mac_obj->tx_power, lr1_mac_obj->tx_data_rate, 
+                                 lr1_mac_obj->tx_data_rate_adr, lr1_mac_obj->nb_trans );
     
     return OKLORAWAN;
 }

@@ -182,8 +182,13 @@ void lr1_stack_mac_region_config( lr1_stack_mac_t* lr1_mac )
 {
     smtc_real_config( lr1_mac->real );
     lr1_mac->rx2_frequency    = real_const.const_rx2_freq;
+    
+    // 🔍 CRITICAL DEBUG: This may override session-restored MAC parameters!
+    int8_t old_tx_power = lr1_mac->tx_power;
     lr1_mac->tx_power         = real_const.const_tx_power_dbm;
     lr1_mac->max_erp_dbm      = real_const.const_tx_power_dbm;
+    SMTC_MODEM_HAL_TRACE_PRINTF( "REGION CONFIG: TxPower %d -> %d (regional default=%d)\n",
+                                 old_tx_power, lr1_mac->tx_power, real_const.const_tx_power_dbm );
     lr1_mac->rx1_dr_offset    = 0;
     lr1_mac->rx2_data_rate    = real_const.const_rx2_dr_init;
     lr1_mac->rx1_delay_s      = real_const.const_received_delay1;
@@ -1951,7 +1956,10 @@ static void link_adr_parser( lr1_stack_mac_t* lr1_mac )
             // If power id is 0x0F, ignore the value
             if( tx_power_tmp != 0x0F )
             {
+                int8_t old_tx_power = lr1_mac->tx_power;
                 lr1_mac->tx_power = smtc_real_convert_power_cmd( lr1_mac->real, tx_power_tmp, lr1_mac->max_erp_dbm );
+                SMTC_MODEM_HAL_TRACE_PRINTF( "LINKADR: TxPower changed %d -> %d (cmd=%d, max_erp=%d)\n",
+                                             old_tx_power, lr1_mac->tx_power, tx_power_tmp, lr1_mac->max_erp_dbm );
             }
             lr1_mac->nb_trans = ( nb_trans_tmp == 0 ) ? 1 : nb_trans_tmp;
             // If datarate requested is 0x0F, ignore the value
