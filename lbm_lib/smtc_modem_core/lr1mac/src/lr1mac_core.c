@@ -1419,6 +1419,11 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     session_ctx.tx_power = lr1_mac_obj->tx_power;
     session_ctx.nb_trans = lr1_mac_obj->nb_trans;
     
+    // 🔍 DR TRACKING: Values being saved to session
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: Session save at %lu s\n", smtc_modem_hal_get_time_in_s() );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 TRACKING: Saving tx_data_rate=%d, tx_data_rate_adr=%d to session\n",
+                                 session_ctx.tx_data_rate, session_ctx.tx_data_rate_adr );
+    
     // 🔍 MAC PARAMS DEBUG: Log critical MAC parameters being saved
     SMTC_MODEM_HAL_TRACE_PRINTF( "MAC SAVE: TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
                                  session_ctx.tx_power, session_ctx.tx_data_rate, 
@@ -1441,6 +1446,19 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     session_ctx.adr_ack_limit = lr1_mac_obj->adr_ack_limit;
     session_ctx.adr_enable = lr1_mac_obj->adr_enable;
     
+    // 🔑 CRITICAL: Save ADR strategy state (prevents mobile ADR algorithm from overriding negotiated params)
+    session_ctx.adr_mode_select = (int)lr1_mac_obj->adr_mode_select;
+    session_ctx.adr_mode_select_tmp = (int)lr1_mac_obj->adr_mode_select_tmp;
+    session_ctx.no_rx_packet_count = lr1_mac_obj->no_rx_packet_count;
+    session_ctx.available_link_adr = lr1_mac_obj->available_link_adr;
+    session_ctx.adr_ack_delay_init = lr1_mac_obj->adr_ack_delay_init;
+    session_ctx.adr_ack_limit_init = lr1_mac_obj->adr_ack_limit_init;
+    session_ctx.no_rx_packet_count_in_mobile_mode = lr1_mac_obj->no_rx_packet_count_in_mobile_mode;
+    
+    // 🔍 ADR STRATEGY DEBUG: Log what ADR strategy is being saved
+    SMTC_MODEM_HAL_TRACE_PRINTF( "ADR STRATEGY SAVE: mode_select=%d, mode_select_tmp=%d, no_rx_count=%d\n",
+                                 session_ctx.adr_mode_select, session_ctx.adr_mode_select_tmp, session_ctx.no_rx_packet_count );
+    
     // Join information
     session_ctx.dev_nonce = lr1_mac_obj->dev_nonce;
     memcpy( session_ctx.join_nonce, lr1_mac_obj->join_nonce, sizeof(session_ctx.join_nonce) );
@@ -1448,6 +1466,21 @@ status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj )
     // Network time
     session_ctx.seconds_since_epoch = lr1_mac_obj->seconds_since_epoch;
     session_ctx.fractional_second = lr1_mac_obj->fractional_second;
+    
+    // 🔧 APPLICATION TIME SYNC STATE: Save ESP32 app-level time sync state
+    // These external variables are defined in the ESP32 application layer
+    extern uint32_t last_network_time_sync;
+    extern bool initial_time_sync_requested;
+    extern uint32_t time_sync_debug_counter;
+    
+    session_ctx.app_last_time_sync_request = last_network_time_sync;
+    session_ctx.app_initial_time_sync_done = initial_time_sync_requested;
+    session_ctx.app_time_sync_counter = time_sync_debug_counter;
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION SAVE: App time sync state - last_request=%lu, initial_done=%s, counter=%lu\n",
+                                 (unsigned long)session_ctx.app_last_time_sync_request,
+                                 session_ctx.app_initial_time_sync_done ? "YES" : "NO",
+                                 (unsigned long)session_ctx.app_time_sync_counter );
     
     // Class B parameters (if applicable)
     session_ctx.beacon_freq_hz = lr1_mac_obj->beacon_freq_hz;
@@ -1524,6 +1557,11 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     lr1_mac_obj->fcnt_dwn = session_ctx.fcnt_dwn;
     lr1_mac_obj->join_status = session_ctx.join_status;
     
+    // 🔍 DR TRACKING: Values being restored from session
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: Session restore at %lu s\n", smtc_modem_hal_get_time_in_s() );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 TRACKING: Restoring tx_data_rate=%d, tx_data_rate_adr=%d from session\n",
+                                 session_ctx.tx_data_rate, session_ctx.tx_data_rate_adr );
+    
     // ADR and MAC negotiated parameters
     lr1_mac_obj->tx_data_rate = session_ctx.tx_data_rate;
     lr1_mac_obj->tx_data_rate_adr = session_ctx.tx_data_rate_adr;
@@ -1552,6 +1590,19 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     lr1_mac_obj->adr_ack_limit = session_ctx.adr_ack_limit;
     lr1_mac_obj->adr_enable = session_ctx.adr_enable;
     
+    // 🔑 CRITICAL: Restore ADR strategy state (prevents mobile ADR algorithm from overriding negotiated params)
+    lr1_mac_obj->adr_mode_select = (dr_strategy_t)session_ctx.adr_mode_select;
+    lr1_mac_obj->adr_mode_select_tmp = (dr_strategy_t)session_ctx.adr_mode_select_tmp;
+    lr1_mac_obj->no_rx_packet_count = session_ctx.no_rx_packet_count;
+    lr1_mac_obj->available_link_adr = session_ctx.available_link_adr;
+    lr1_mac_obj->adr_ack_delay_init = session_ctx.adr_ack_delay_init;
+    lr1_mac_obj->adr_ack_limit_init = session_ctx.adr_ack_limit_init;
+    lr1_mac_obj->no_rx_packet_count_in_mobile_mode = session_ctx.no_rx_packet_count_in_mobile_mode;
+    
+    // 🔍 ADR STRATEGY DEBUG: Log what ADR strategy is being restored
+    SMTC_MODEM_HAL_TRACE_PRINTF( "ADR STRATEGY RESTORE: mode_select=%d, mode_select_tmp=%d, no_rx_count=%d\n",
+                                 lr1_mac_obj->adr_mode_select, lr1_mac_obj->adr_mode_select_tmp, lr1_mac_obj->no_rx_packet_count );
+    
     // Join information
     lr1_mac_obj->dev_nonce = session_ctx.dev_nonce;
     memcpy( lr1_mac_obj->join_nonce, session_ctx.join_nonce, sizeof(lr1_mac_obj->join_nonce) );
@@ -1559,6 +1610,21 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     // Network time
     lr1_mac_obj->seconds_since_epoch = session_ctx.seconds_since_epoch;
     lr1_mac_obj->fractional_second = session_ctx.fractional_second;
+    
+    // 🔧 APPLICATION TIME SYNC STATE: Restore ESP32 app-level time sync state
+    // These external variables are defined in the ESP32 application layer
+    extern uint32_t last_network_time_sync;
+    extern bool initial_time_sync_requested;
+    extern uint32_t time_sync_debug_counter;
+    
+    last_network_time_sync = session_ctx.app_last_time_sync_request;
+    initial_time_sync_requested = session_ctx.app_initial_time_sync_done;
+    time_sync_debug_counter = session_ctx.app_time_sync_counter;
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "SESSION RESTORE: App time sync state - last_request=%lu, initial_done=%s, counter=%lu\n",
+                                 (unsigned long)last_network_time_sync,
+                                 initial_time_sync_requested ? "YES" : "NO",
+                                 (unsigned long)time_sync_debug_counter );
     
     // Class B parameters (if applicable)
     lr1_mac_obj->beacon_freq_hz = session_ctx.beacon_freq_hz;
@@ -1585,6 +1651,11 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     uint8_t preserved_nb_trans = session_ctx.nb_trans;
     int8_t preserved_max_erp_dbm = session_ctx.max_erp_dbm;
     
+    // 🔧 ADR STRATEGY PROTECTION: Store critical ADR strategy state that must be preserved
+    dr_strategy_t preserved_adr_mode_select = (dr_strategy_t)session_ctx.adr_mode_select;
+    dr_strategy_t preserved_adr_mode_select_tmp = (dr_strategy_t)session_ctx.adr_mode_select_tmp;
+    bool preserved_adr_enable = session_ctx.adr_enable;
+    
     // Note: Any potential overwrites from region config should be completed by now
     
     // 🔧 FORCE RE-APPLICATION: Re-apply critical MAC parameters to ensure they persist
@@ -1595,9 +1666,18 @@ status_lorawan_t lr1mac_core_session_restore( lr1_stack_mac_t* lr1_mac_obj )
     lr1_mac_obj->nb_trans = preserved_nb_trans;
     lr1_mac_obj->max_erp_dbm = preserved_max_erp_dbm;
     
+    // 🔧 FORCE ADR STRATEGY RE-APPLICATION: Re-apply critical ADR strategy state
+    // This is CRITICAL to prevent mobile ADR algorithm from overriding negotiated parameters
+    lr1_mac_obj->adr_mode_select = preserved_adr_mode_select;
+    lr1_mac_obj->adr_mode_select_tmp = preserved_adr_mode_select_tmp;
+    lr1_mac_obj->adr_enable = preserved_adr_enable;
+    
     SMTC_MODEM_HAL_TRACE_PRINTF( "MAC PROTECTION: Final MAC parameters enforced - TxPower=%d, TxDR=%d, TxDR_ADR=%d, NbTrans=%d\n",
                                  lr1_mac_obj->tx_power, lr1_mac_obj->tx_data_rate, 
                                  lr1_mac_obj->tx_data_rate_adr, lr1_mac_obj->nb_trans );
+    
+    SMTC_MODEM_HAL_TRACE_PRINTF( "ADR PROTECTION: Final ADR strategy enforced - mode_select=%d, adr_enable=%s\n",
+                                 lr1_mac_obj->adr_mode_select, lr1_mac_obj->adr_enable ? "YES" : "NO" );
     
     return OKLORAWAN;
 }

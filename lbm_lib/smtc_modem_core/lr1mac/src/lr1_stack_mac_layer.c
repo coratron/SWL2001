@@ -374,6 +374,17 @@ void lr1_stack_mac_rx_gfsk_launch_callback_for_rp( void* rp_void )
 
 void lr1_stack_mac_tx_radio_start( lr1_stack_mac_t* lr1_mac )
 {
+    // 🔍 CRITICAL DR TRACKING: Final values at radio transmission
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: Radio start at %lu ms\n", smtc_modem_hal_get_time_in_ms() );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 TRACKING: Final tx_data_rate=%d, tx_data_rate_adr=%d before radio config\n",
+                                 lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr );
+    
+    // 📡 TRANSMISSION START DEBUG: Show final DR values before radio configuration
+    SMTC_MODEM_HAL_TRACE_PRINTF( "📡 RADIO START: tx_data_rate=%d, tx_data_rate_adr=%d, adr_mode_select=%d\n",
+                                 lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr, lr1_mac->adr_mode_select );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "📡 FRAME TYPE: type_of_ans_to_send=%d, fcnt_up=%u\n", 
+                                 lr1_mac->type_of_ans_to_send, lr1_mac->fcnt_up );
+    
     rp_radio_params_t radio_params = { 0 };
     rp_task_t         rp_task      = { 0 };
     uint32_t          toa          = 0;
@@ -1118,6 +1129,10 @@ rx_packet_type_t lr1_stack_mac_rx_frame_decode( lr1_stack_mac_t* lr1_mac )
         lr1_mac->rx_down_data.rx_metadata.tx_ack_bit = tx_ack_bit;
         lr1_mac->fcnt_dwn                            = fcnt_dwn_stack_tmp;
         lr1_mac->adr_ack_cnt                         = 0;  // reset adr counter, receive a valid frame.
+        
+        // 🔄 ADR COUNTER RESET: Downlink received - ADR timeout counter reset to 0
+        SMTC_MODEM_HAL_TRACE_PRINTF( "✅ ADR Counter Reset: ack_cnt=0 (downlink received, ADR timeout prevented)\n" );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "   Current DR=%d preserved (no ADR timeout decrement)\n", lr1_mac->tx_data_rate_adr );
         lr1_mac->no_rx_packet_count_in_mobile_mode   = 0;
         lr1_mac->no_rx_packet_count                  = 0;
         lr1_mac->no_rx_packet_since_s                = smtc_modem_hal_get_time_in_s( );
@@ -1218,6 +1233,19 @@ void lr1_stack_mac_update( lr1_stack_mac_t* lr1_mac )
         lr1_mac->fcnt_up++;
         lr1_mac->adr_ack_cnt++;  // increment adr counter each new uplink frame
         
+        // 🔍 ADR COUNTER TRACKING: Monitor the counter that leads to ADR timeouts
+        SMTC_MODEM_HAL_TRACE_PRINTF( "📊 ADR Counter Incremented: ack_cnt=%d (limit=%d, delay=%d, threshold=%d)\n",
+                                     lr1_mac->adr_ack_cnt, lr1_mac->adr_ack_limit, lr1_mac->adr_ack_delay,
+                                     lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay );
+        
+        if( lr1_mac->adr_ack_cnt >= (lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay) - 2 )
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "⚠️  ADR TIMEOUT WARNING: Only %d frames until ADR decrements DR!\n",
+                                         (lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay) - lr1_mac->adr_ack_cnt );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   Current DR=%d will be decremented if no downlink received\n", 
+                                         lr1_mac->tx_data_rate_adr );
+        }
+        
         // 🔧 SESSION PERSISTENCE: Save session after frame counter increment
         // This ensures frame counters are persisted immediately after transmission
         extern status_lorawan_t lr1mac_core_session_save( lr1_stack_mac_t* lr1_mac_obj );
@@ -1229,22 +1257,80 @@ void lr1_stack_mac_update( lr1_stack_mac_t* lr1_mac )
     }
     else
     {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🔄 RETRANSMISSION: Setting type=USRFRAME_TORETRANSMIT, nb_trans_cpt=%d->%d\n", 
+                                     lr1_mac->nb_trans_cpt, lr1_mac->nb_trans_cpt - 1 );
         lr1_mac->type_of_ans_to_send = USRFRAME_TORETRANSMIT;
         lr1_mac->nb_trans_cpt--;
     }
 
-    if( lr1_mac->adr_ack_cnt >= lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay )
+    // 🚨 ADR TIMEOUT DECISION POINT - This is where SF changes from 7 to 10!
+    SMTC_MODEM_HAL_TRACE_PRINTF( "ADR TIMEOUT CHECK: ack_cnt=%d, limit=%d, delay=%d, threshold=%d\n",
+                                 lr1_mac->adr_ack_cnt, lr1_mac->adr_ack_limit, lr1_mac->adr_ack_delay,
+                                 lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay );
+    
+    // 🛡️  ADR PROTECTION: Enhanced logic for STATIC_ADR_MODE (network controlled)
+    bool adr_timeout_should_trigger = (lr1_mac->adr_ack_cnt >= lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay);
+    bool is_static_adr_mode = (lr1_mac->adr_mode_select == STATIC_ADR_MODE);
+    bool has_negotiated_params = (lr1_mac->tx_data_rate_adr != lr1_mac->tx_data_rate); // Different from default
+    
+    // 🔒 ENHANCED PROTECTION: In STATIC_ADR_MODE with negotiated parameters, be more conservative
+    if( is_static_adr_mode && has_negotiated_params && adr_timeout_should_trigger )
     {
+        // For network-controlled ADR with negotiated parameters, extend timeout by 2x
+        // This prevents premature ADR timeouts for devices with infrequent transmissions
+        uint32_t extended_threshold = (lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay) * 2;
+        bool extended_timeout = (lr1_mac->adr_ack_cnt >= extended_threshold);
+        
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🛡️  STATIC_ADR_MODE Protection: Standard timeout reached, checking extended timeout\n" );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "   Extended threshold: %lu (standard=%d)\n", 
+                                     extended_threshold, lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay );
+        
+        if( !extended_timeout )
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🔒 ADR TIMEOUT BLOCKED: Network-controlled device with negotiated DR=%d\n", 
+                                         lr1_mac->tx_data_rate_adr );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   Extending timeout to %lu frames to prevent premature DR decrement\n", 
+                                         extended_threshold );
+            adr_timeout_should_trigger = false;
+        }
+        else
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🚨 EXTENDED TIMEOUT REACHED: %d >= %lu, allowing ADR timeout\n", 
+                                         lr1_mac->adr_ack_cnt, extended_threshold );
+        }
+    }
+    
+    if( adr_timeout_should_trigger )
+    {
+        // 🔥 CRITICAL: ADR timeout reached - about to decrement data rate (SF7 → SF10)
+        uint8_t old_dr = lr1_mac->tx_data_rate_adr;
+        int8_t old_power = lr1_mac->tx_power;
+        
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🚨 ADR TIMEOUT TRIGGERED! About to decrement DR from %d\n", old_dr );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "   Current: DR=%d, Power=%d, Mode=%d\n", 
+                                     old_dr, old_power, lr1_mac->adr_mode_select );
+        SMTC_MODEM_HAL_TRACE_PRINTF( "   Reason: No downlinks for %d frames (limit=%d + delay=%d)\n",
+                                     lr1_mac->adr_ack_cnt, lr1_mac->adr_ack_limit, lr1_mac->adr_ack_delay );
+        
         // In case of retransmission, if the packet is too long for the next DR, don't decrease the DR
         if( lr1_mac->type_of_ans_to_send == USRFRAME_TORETRANSMIT )
         {
             uint8_t dr_tmp = smtc_real_decrement_dr_simulation( lr1_mac->real, lr1_mac->tx_data_rate_adr );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   Retransmission case: simulated new DR would be %d\n", dr_tmp );
+            
             if( smtc_real_is_payload_size_valid( lr1_mac->real, dr_tmp, lr1_mac->app_payload_size, UP_LINK,
                                                  lr1_mac->tx_fopts_current_length ) == OKLORAWAN )
             {
                 smtc_real_decrement_dr( lr1_mac->real, lr1_mac->adr_mode_select, &lr1_mac->tx_data_rate_adr,
                                         &lr1_mac->tx_power, &lr1_mac->nb_trans );
                 lr1_mac->adr_ack_cnt = lr1_mac->adr_ack_limit;
+                
+                SMTC_MODEM_HAL_TRACE_PRINTF( "✅ DR DECREMENTED (retrans): %d → %d, Power: %d → %d\n",
+                                             old_dr, lr1_mac->tx_data_rate_adr, old_power, lr1_mac->tx_power );
+            }
+            else
+            {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "❌ DR DECREMENT SKIPPED: payload too large for DR %d\n", dr_tmp );
             }
         }
         else
@@ -1252,7 +1338,17 @@ void lr1_stack_mac_update( lr1_stack_mac_t* lr1_mac )
             smtc_real_decrement_dr( lr1_mac->real, lr1_mac->adr_mode_select, &lr1_mac->tx_data_rate_adr,
                                     &lr1_mac->tx_power, &lr1_mac->nb_trans );
             lr1_mac->adr_ack_cnt = lr1_mac->adr_ack_limit;
+            
+            SMTC_MODEM_HAL_TRACE_PRINTF( "✅ DR DECREMENTED (normal): %d → %d, Power: %d → %d\n",
+                                         old_dr, lr1_mac->tx_data_rate_adr, old_power, lr1_mac->tx_power );
         }
+        
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🔄 ADR timeout processing complete. ack_cnt reset to %d\n", lr1_mac->adr_ack_cnt );
+    }
+    else
+    {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "✅ ADR timeout not reached (ack_cnt=%d < threshold=%d)\n",
+                                     lr1_mac->adr_ack_cnt, lr1_mac->adr_ack_limit + lr1_mac->adr_ack_delay );
     }
 
     if( ( lr1_mac->adr_ack_cnt >= lr1_mac->no_rx_packet_reset_threshold ) &&
@@ -1281,14 +1377,33 @@ void lr1_stack_mac_update( lr1_stack_mac_t* lr1_mac )
     {
         if( lr1_mac->type_of_ans_to_send != USRFRAME_TORETRANSMIT )
         {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🆕 FRESH TRANSMISSION: Calling smtc_real_get_next_tx_dr()\n" );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   Before: tx_data_rate=%d, tx_data_rate_adr=%d, adr_mode_select=%d\n",
+                                         lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr, lr1_mac->adr_mode_select );
+            
             status_lorawan_t status =
                 smtc_real_get_next_tx_dr( lr1_mac->real, lr1_mac->join_status, &lr1_mac->adr_mode_select,
                                           &lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr, &lr1_mac->adr_enable );
+
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   After:  tx_data_rate=%d, tx_data_rate_adr=%d, adr_mode_select=%d\n",
+                                         lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr, lr1_mac->adr_mode_select );
+            
+            // 🔍 CRITICAL DR TRACKING: Log values immediately after DR decision
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: Post-decision values locked in at %lu ms\n", 
+                                         smtc_modem_hal_get_time_in_ms() );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 TRACKING: tx_data_rate=%d, tx_data_rate_adr=%d (should remain stable)\n",
+                                         lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr );
 
             if( status == ERRORLORAWAN )
             {
                 SMTC_MODEM_HAL_PANIC( " Data Rate incompatible with channel mask\n" );
             }
+        }
+        else
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🔄 RETRANSMISSION: Skipping DR decision, using cached values\n" );
+            SMTC_MODEM_HAL_TRACE_PRINTF( "   Current: tx_data_rate=%d, tx_data_rate_adr=%d, adr_mode_select=%d\n",
+                                         lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr, lr1_mac->adr_mode_select );
         }
     }
     switch( lr1_mac->type_of_ans_to_send )
@@ -1889,6 +2004,10 @@ static void link_adr_parser( lr1_stack_mac_t* lr1_mac )
         ( ( lr1_mac->nwk_payload[lr1_mac->nwk_payload_index + ( ( nb_link_adr_req - 1 ) * LINK_ADR_REQ_SIZE ) + 1] &
             0xF0 ) >>
           4 );
+    
+    // 🔍 LINKADRREQ DEBUG: Track ChirpStack DR commands
+    SMTC_MODEM_HAL_TRACE_PRINTF( "📡 LinkADRReq: ChirpStack commanded DR=%d, current tx_data_rate_adr=%d\n", 
+                                 dr_tmp, lr1_mac->tx_data_rate_adr );
 
     uint8_t tx_power_tmp =
         ( lr1_mac->nwk_payload[lr1_mac->nwk_payload_index + ( ( nb_link_adr_req - 1 ) * LINK_ADR_REQ_SIZE ) + 1] &
@@ -1924,11 +2043,23 @@ static void link_adr_parser( lr1_stack_mac_t* lr1_mac )
         // If datarate requested is 0x0F, ignore the value
         if( dr_tmp != 0x0F )
         {
+            // 🔍 LINKADRREQ VALIDATION: Check if ChirpStack's DR is acceptable
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 Validating DR=%d for AU915 region...\n", dr_tmp );
+            
             if( smtc_real_is_tx_dr_acceptable( lr1_mac->real, dr_tmp, true ) == ERRORLORAWAN )
             {  // Test Channelmask enables a not defined channel
                 status_ans &= 0x5;
-                SMTC_MODEM_HAL_TRACE_WARNING( "INVALID DATARATE\n" );
+                SMTC_MODEM_HAL_TRACE_WARNING( "❌ INVALID DATARATE: DR=%d rejected by AU915 validation\n", dr_tmp );
+                SMTC_MODEM_HAL_TRACE_WARNING( "   This explains why ChirpStack DR5 was ignored!\n" );
             }
+            else
+            {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "✅ DR=%d validation passed for AU915\n", dr_tmp );
+            }
+        }
+        else
+        {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "⏭️  DR=0x0F (ignore DR change), keeping current DR=%d\n", lr1_mac->tx_data_rate_adr );
         }
 
         // Valid the last TxPower  And Prepare Ans
@@ -1965,12 +2096,53 @@ static void link_adr_parser( lr1_stack_mac_t* lr1_mac )
             // If datarate requested is 0x0F, ignore the value
             if( dr_tmp != 0x0F )
             {
+                uint8_t old_dr = lr1_mac->tx_data_rate_adr;
                 lr1_mac->tx_data_rate_adr = dr_tmp;
+                
+                // 🔍 DR TRACKING: Before synchronization
+                SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: Before sync - tx_data_rate=%d, tx_data_rate_adr=%d\n",
+                                             lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr );
+                
+                // 🔧 CRITICAL FIX: Synchronize tx_data_rate with tx_data_rate_adr for STATIC_ADR_MODE
+                // This ensures both data packets and MAC commands use the same negotiated data rate
+                if( lr1_mac->adr_mode_select == STATIC_ADR_MODE ) {
+                    uint8_t old_tx_dr = lr1_mac->tx_data_rate;
+                    lr1_mac->tx_data_rate = dr_tmp;
+                    SMTC_MODEM_HAL_TRACE_PRINTF( "🔧 SYNC FIX: tx_data_rate synchronized %d -> %d to match tx_data_rate_adr\n",
+                                                 old_tx_dr, lr1_mac->tx_data_rate );
+                }
+                
+                // 🔍 DR TRACKING: After synchronization
+                SMTC_MODEM_HAL_TRACE_PRINTF( "🔍 DR TRACKING: After sync - tx_data_rate=%d, tx_data_rate_adr=%d\n",
+                                             lr1_mac->tx_data_rate, lr1_mac->tx_data_rate_adr );
+                
+                // 🎯 LINKADRREQ SUCCESS: Track successful DR changes
+                SMTC_MODEM_HAL_TRACE_PRINTF( "✅ LinkADRReq APPLIED: DR changed %d -> %d (ChirpStack commanded DR%d)\n", 
+                                             old_dr, lr1_mac->tx_data_rate_adr, dr_tmp );
+                
+                // Convert DR to SF for human-readable logging
+                if( dr_tmp <= 5 ) {
+                    uint8_t sf = 12 - dr_tmp;  // DR0=SF12, DR1=SF11, ..., DR5=SF7
+                    SMTC_MODEM_HAL_TRACE_PRINTF( "   DR%d = SF%d/125kHz - next transmission will use SF%d\n", 
+                                                 dr_tmp, sf, sf );
+                }
             }
             lr1_mac->available_link_adr = true;
             SMTC_MODEM_HAL_TRACE_PRINTF( "MacTxDataRateAdr = %d\n", lr1_mac->tx_data_rate_adr );
             SMTC_MODEM_HAL_TRACE_PRINTF( "MacTxPower = %d\n", lr1_mac->tx_power );
             SMTC_MODEM_HAL_TRACE_PRINTF( "MacNbTrans = %d\n", lr1_mac->nb_trans );
+        }
+        else
+        {
+            // 🚨 LINKADRREQ REJECTED: Track why ChirpStack commands are ignored
+            SMTC_MODEM_HAL_TRACE_WARNING( "❌ LinkADRReq REJECTED: status_ans=0x%02X (should be 0x7 for success)\n", status_ans );
+            SMTC_MODEM_HAL_TRACE_WARNING( "   ChirpStack DR=%d command will be rejected\n", dr_tmp );
+            SMTC_MODEM_HAL_TRACE_WARNING( "   Device will keep current tx_data_rate_adr=%d\n", lr1_mac->tx_data_rate_adr );
+            
+            // Decode rejection reason
+            if( (status_ans & 0x1) == 0 ) SMTC_MODEM_HAL_TRACE_WARNING( "   - Power level rejected\n" );
+            if( (status_ans & 0x2) == 0 ) SMTC_MODEM_HAL_TRACE_WARNING( "   - Data rate rejected\n" );
+            if( (status_ans & 0x4) == 0 ) SMTC_MODEM_HAL_TRACE_WARNING( "   - Channel mask rejected\n" );
         }
     }
 

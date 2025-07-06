@@ -403,24 +403,45 @@ void smtc_real_set_dr_distribution( smtc_real_t* real, uint8_t adr_mode, uint8_t
 status_lorawan_t smtc_real_get_next_tx_dr( smtc_real_t* real, join_status_t join_status, dr_strategy_t* adr_mode_select,
                                            uint8_t* tx_data_rate, uint8_t tx_data_rate_adr, bool* adr_enable )
 {
+    // 🔧 CRITICAL DR DECISION DEBUG: This function determines the final data rate for transmission
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔧 DR DECISION: adr_mode=%d, join_status=%d, tx_data_rate_adr=%d\n", 
+                                 *adr_mode_select, join_status, tx_data_rate_adr );
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🔧 ADR MODES: STATIC_ADR=%d, MOBILE_LONGRANGE=%d, MOBILE_LOWPOWER=%d\n", 
+                                 STATIC_ADR_MODE, MOBILE_LONGRANGE_DR_DISTRIBUTION, MOBILE_LOWPER_DR_DISTRIBUTION );
+    
     for( int j = 0; j < 224; j++ )  // return error after 224 trials
     {
         if( ( *adr_mode_select == STATIC_ADR_MODE ) && ( join_status == JOINED ) )
         {
+            // 🔧 CRITICAL FIX: Use current tx_data_rate if tx_data_rate_adr is outdated
+            // This preserves negotiated DR values when ChirpStack doesn't send LinkADRReq
+            uint8_t effective_dr = tx_data_rate_adr;
+            
+            // If tx_data_rate is higher than tx_data_rate_adr, it means we have a more recent negotiation
+            // This happens when LinkADRReq was processed but tx_data_rate_adr wasn't updated for this transmission
+            if( *tx_data_rate > tx_data_rate_adr ) {
+                effective_dr = *tx_data_rate;
+                SMTC_MODEM_HAL_TRACE_PRINTF( "🔧 DR PERSISTENCE: Using tx_data_rate=%d instead of stale tx_data_rate_adr=%d\n", 
+                                             *tx_data_rate, tx_data_rate_adr );
+            } else {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "✅ NETWORK_CONTROLLED: Using negotiated DR=%d from LinkADRReq\n", tx_data_rate_adr );
+            }
+            
             if( uplink_dwell_time_ctx == true )
             {
-                *tx_data_rate = ( tx_data_rate_adr < real_const.const_min_tx_dr_limit )
+                *tx_data_rate = ( effective_dr < real_const.const_min_tx_dr_limit )
                                     ? real_const.const_min_tx_dr_limit
-                                    : tx_data_rate_adr;
+                                    : effective_dr;
             }
             else
             {
-                *tx_data_rate = tx_data_rate_adr;
+                *tx_data_rate = effective_dr;
             }
             *adr_enable = 1;
         }
         else
         {
+            SMTC_MODEM_HAL_TRACE_PRINTF( "❌ MOBILE_MODE: Ignoring LinkADRReq, using mobile DR distribution\n" );
             uint8_t distri_sum = 0;
             for( uint8_t i = 0; i < real_const.const_number_of_tx_dr; i++ )
             {
@@ -449,6 +470,15 @@ status_lorawan_t smtc_real_get_next_tx_dr( smtc_real_t* real, join_status_t join
         uint16_t dr_tmp = smtc_real_mask_tx_dr_channel_up_dwell_time_check( real );
         if( SMTC_GET_BIT16( &dr_tmp, *tx_data_rate ) == 1 )
         {
+            // 🔧 FINAL DR DECISION SUMMARY (mobile mode)
+            SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 FINAL DR DECISION: tx_data_rate=%d, adr_enable=%d, adr_mode=%d\n", 
+                                         *tx_data_rate, *adr_enable, *adr_mode_select );
+            if( *adr_mode_select == STATIC_ADR_MODE ) {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 Next transmission will honor ChirpStack LinkADRReq commands\n" );
+            } else {
+                SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 Next transmission will ignore ChirpStack LinkADRReq commands\n" );
+            }
+            
             return OKLORAWAN;
         }
     }
@@ -465,6 +495,16 @@ status_lorawan_t smtc_real_get_next_tx_dr( smtc_real_t* real, join_status_t join
         *tx_data_rate = tx_data_rate_adr;
     }
     *adr_enable = 1;
+    
+    // 🔧 FINAL DR DECISION SUMMARY
+    SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 FINAL DR DECISION: tx_data_rate=%d, adr_enable=%d, adr_mode=%d\n", 
+                                 *tx_data_rate, *adr_enable, *adr_mode_select );
+    if( *adr_mode_select == STATIC_ADR_MODE ) {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 Next transmission will honor ChirpStack LinkADRReq commands\n" );
+    } else {
+        SMTC_MODEM_HAL_TRACE_PRINTF( "🎯 Next transmission will ignore ChirpStack LinkADRReq commands\n" );
+    }
+    
     return OKLORAWAN;
 }
 

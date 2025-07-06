@@ -376,6 +376,46 @@ menu "LoRa Basics Modem SX127x Configuration"
             default n
             help
                 Enable Firmware Update Over The Air (FUOTA) functionality.
+
+        choice LBM_SF_CONTROL_MODE
+            prompt "LoRaWAN SF/ADR Control Mode"
+            default LBM_SF_CONTROL_GUI
+            help
+                Select how spreading factor (SF) and data rate are controlled.
+
+            config LBM_SF_CONTROL_ADR
+                bool "ADR"
+                help
+                    Use automatic data rate adaptation controlled by the network server.
+                    Device will adapt SF based on link quality and network commands.
+
+            config LBM_SF_CONTROL_CUSTOM
+                bool "CUSTOM SF"
+                help
+                    Use the SF selected in the application code.
+
+            config LBM_SF_CONTROL_FIXED
+                bool "FIXED SF (manual)"
+                help
+                    Use a fixed SF defined in build configuration.
+                    SF is set at compile time and cannot be changed via GUI.
+        endchoice
+
+        config LBM_FIXED_SF_VALUE
+            int "Fixed SF Value"
+            depends on LBM_SF_CONTROL_FIXED
+            default 7
+            range 7 12
+            help
+                Fixed spreading factor to use when LBM_SF_CONTROL_FIXED is selected.
+                SF7 = fastest/shortest range, SF12 = slowest/longest range.
+        
+        config LBM_ENABLE_SF_DEBUGGING
+            bool "Enable detailed SF/ADR debugging logs"
+            default true
+            help
+                Enable detailed logging of SF selection, ADR profile changes,
+                and data rate enforcement for debugging purposes.
     endmenu
 
     menu "Security Configuration"

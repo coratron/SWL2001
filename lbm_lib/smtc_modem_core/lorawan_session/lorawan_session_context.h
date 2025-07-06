@@ -59,6 +59,15 @@ typedef struct {
     uint8_t  adr_ack_limit;                  // ADR acknowledgment limit
     bool     adr_enable;                     // ADR enable status
     
+    // 🔑 CRITICAL ADR STRATEGY STATE (Missing from original implementation)
+    int      adr_mode_select;                // Current ADR strategy (dr_strategy_t enum)
+    int      adr_mode_select_tmp;            // Temporary ADR strategy during negotiations
+    uint16_t no_rx_packet_count;             // Consecutive uplinks without downlinks
+    bool     available_link_adr;             // Link ADR command availability flag
+    uint8_t  adr_ack_delay_init;             // Initial ADR ACK delay setting
+    uint8_t  adr_ack_limit_init;             // Initial ADR ACK limit setting
+    uint16_t no_rx_packet_count_in_mobile_mode; // No RX packet count in mobile mode
+    
     // Join and Network Information
     join_status_t join_status;               // Current join status
     uint16_t dev_nonce;                      // Device nonce (last used)
@@ -67,6 +76,11 @@ typedef struct {
     // Network Time
     uint32_t seconds_since_epoch;            // Network time seconds
     uint32_t fractional_second;              // Network time fractional part
+    
+    // 🔧 APPLICATION TIME SYNC STATE (ESP32 specific)
+    uint32_t app_last_time_sync_request;     // Absolute time (seconds) when last DeviceTimeReq was sent
+    bool     app_initial_time_sync_done;     // Whether initial time sync after join completed
+    uint32_t app_time_sync_counter;          // Debug counter for time sync requests
     
     // Class B (optional)
     uint32_t beacon_freq_hz;                 // Beacon frequency

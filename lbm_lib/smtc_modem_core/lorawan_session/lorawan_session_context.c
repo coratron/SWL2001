@@ -140,6 +140,11 @@ void lorawan_session_init_context(lorawan_session_context_t* ctx)
     ctx->rx2_data_rate = 0;
     ctx->rx2_frequency = 869525000;  // Default for EU868
     
+    // Initialize application time sync state
+    ctx->app_last_time_sync_request = 0;
+    ctx->app_initial_time_sync_done = false;
+    ctx->app_time_sync_counter = 0;
+    
     // CRC will be calculated when saving
     ctx->crc32 = 0;
 }
