@@ -601,17 +601,17 @@ static void session_context_store_to_rtc(const uint8_t *buffer, const uint32_t s
         session_context_valid_rtc = true;
         ESP_LOGI(TAG, "Session context stored to RTC memory (valid)");
         
-        // Periodically sync to NVS for backup (every 10 saves or on join status change)
-        static uint32_t save_counter = 0;
-        static join_status_t last_join_status = NOT_JOINED;
-        
-        save_counter++;
-        if (save_counter >= 10 || session_context_rtc.join_status != last_join_status)
-        {
-            session_context_sync_to_nvs();
-            save_counter = 0;
-            last_join_status = session_context_rtc.join_status;
-        }
+        // NVS sync disabled - RTC memory sufficient for deep sleep cycling
+        // static uint32_t save_counter = 0;
+        // static join_status_t last_join_status = NOT_JOINED;
+        // 
+        // save_counter++;
+        // if (save_counter >= 10 || session_context_rtc.join_status != last_join_status)
+        // {
+        //     session_context_sync_to_nvs();
+        //     save_counter = 0;
+        //     last_join_status = session_context_rtc.join_status;
+        // }
     }
     else
     {
@@ -649,85 +649,87 @@ static void session_context_restore_from_rtc(uint8_t *buffer, const uint32_t siz
         }
     }
     
-    // RTC memory is invalid or corrupted, try NVS backup
-    session_context_restore_from_nvs();
+    // NVS fallback disabled - RTC memory only
+    // session_context_restore_from_nvs();
+    // 
+    // // Check if NVS restore was successful
+    // if (session_context_valid_rtc)
+    // {
+    //     uint32_t current_time = smtc_modem_hal_get_time_in_s();
+    //     lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+    //     
+    //     if (validation == LORAWAN_SESSION_VALID)
+    //     {
+    //         memcpy(buffer, &session_context_rtc, sizeof(lorawan_session_context_t));
+    //         ESP_LOGI(TAG, "Session context restored from NVS backup");
+    //         return;
+    //     }
+    // }
     
-    // Check if NVS restore was successful
-    if (session_context_valid_rtc)
-    {
-        uint32_t current_time = smtc_modem_hal_get_time_in_s();
-        lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
-        
-        if (validation == LORAWAN_SESSION_VALID)
-        {
-            memcpy(buffer, &session_context_rtc, sizeof(lorawan_session_context_t));
-            ESP_LOGI(TAG, "Session context restored from NVS backup");
-            return;
-        }
-    }
-    
-    // Both RTC and NVS failed, return default context
-    ESP_LOGW(TAG, "Session context restore failed, returning default context");
+    // RTC failed, return default context (NVS fallback disabled)
+    ESP_LOGW(TAG, "RTC session context invalid, returning default context");
     lorawan_session_init_context((lorawan_session_context_t*)buffer);
 }
 
 static void session_context_sync_to_nvs(void)
 {
-    if (!session_context_valid_rtc)
-    {
-        ESP_LOGW(TAG, "Cannot sync invalid session context to NVS");
-        return;
-    }
-    
-    // Update timestamp before saving to NVS
-    session_context_rtc.last_save_timestamp = smtc_modem_hal_get_time_in_s();
-    session_context_rtc.save_counter++;
-    
-    // Recalculate CRC
-    session_context_rtc.crc32 = lorawan_session_calculate_crc(&session_context_rtc);
-    
-    esp_err_t err = nvs_write_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
-                                        &session_context_rtc, sizeof(lorawan_session_context_t));
-    if (err == ESP_OK)
-    {
-        ESP_LOGI(TAG, "Session context synced to NVS backup");
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Failed to sync session context to NVS: %s", esp_err_to_name(err));
-    }
+    // NVS sync disabled - RTC memory sufficient for deep sleep cycling
+    // if (!session_context_valid_rtc)
+    // {
+    //     ESP_LOGW(TAG, "Cannot sync invalid session context to NVS");
+    //     return;
+    // }
+    // 
+    // // Update timestamp before saving to NVS
+    // session_context_rtc.last_save_timestamp = smtc_modem_hal_get_time_in_s();
+    // session_context_rtc.save_counter++;
+    // 
+    // // Recalculate CRC
+    // session_context_rtc.crc32 = lorawan_session_calculate_crc(&session_context_rtc);
+    // 
+    // esp_err_t err = nvs_write_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
+    //                                     &session_context_rtc, sizeof(lorawan_session_context_t));
+    // if (err == ESP_OK)
+    // {
+    //     ESP_LOGI(TAG, "Session context synced to NVS backup");
+    // }
+    // else
+    // {
+    //     ESP_LOGE(TAG, "Failed to sync session context to NVS: %s", esp_err_to_name(err));
+    // }
 }
 
 static void session_context_restore_from_nvs(void)
 {
-    size_t actual_size = sizeof(lorawan_session_context_t);
-    esp_err_t err = nvs_read_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
-                                       &session_context_rtc, &actual_size);
-    
-    if (err == ESP_OK && actual_size == sizeof(lorawan_session_context_t))
-    {
-        uint32_t current_time = smtc_modem_hal_get_time_in_s();
-        lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
-        
-        if (validation == LORAWAN_SESSION_VALID)
-        {
-            session_context_valid_rtc = true;
-            ESP_LOGI(TAG, "Session context restored from NVS backup");
-        }
-        else
-        {
-            session_context_valid_rtc = false;
-            ESP_LOGW(TAG, "NVS session context validation failed: %d", validation);
-        }
-    }
-    else
-    {
-        session_context_valid_rtc = false;
-        ESP_LOGW(TAG, "Failed to restore session context from NVS: %s", esp_err_to_name(err));
-        
-        // Initialize with default values
-        lorawan_session_init_context(&session_context_rtc);
-    }
+    // NVS restore disabled - RTC memory only
+    // size_t actual_size = sizeof(lorawan_session_context_t);
+    // esp_err_t err = nvs_read_blob_safe(NVS_KEY_LORAWAN_SESSION_CONTEXT, 
+    //                                    &session_context_rtc, &actual_size);
+    // 
+    // if (err == ESP_OK && actual_size == sizeof(lorawan_session_context_t))
+    // {
+    //     uint32_t current_time = smtc_modem_hal_get_time_in_s();
+    //     lorawan_session_validation_t validation = lorawan_session_validate_context(&session_context_rtc, current_time);
+    //     
+    //     if (validation == LORAWAN_SESSION_VALID)
+    //     {
+    //         session_context_valid_rtc = true;
+    //         ESP_LOGI(TAG, "Session context restored from NVS backup");
+    //     }
+    //     else
+    //     {
+    //         session_context_valid_rtc = false;
+    //         ESP_LOGW(TAG, "NVS session context validation failed: %d", validation);
+    //     }
+    // }
+    // else
+    // {
+    //     session_context_valid_rtc = false;
+    //     ESP_LOGW(TAG, "Failed to restore session context from NVS: %s", esp_err_to_name(err));
+    //     
+    //     // Initialize with default values
+    //     lorawan_session_init_context(&session_context_rtc);
+    // }
 }
 
 /* ------------ Session management ------------*/
