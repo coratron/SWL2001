@@ -942,6 +942,21 @@ smtc_modem_return_code_t smtc_modem_get_downlink_data( uint8_t  buff[SMTC_MODEM_
     return rc;
 }
 
+smtc_modem_return_code_t smtc_modem_get_mac_metadata( smtc_modem_dl_metadata_t* metadata )
+{
+    RETURN_BUSY_IF_TEST_MODE( );
+    RETURN_INVALID_IF_NULL( metadata );
+
+    smtc_modem_return_code_t rc = SMTC_MODEM_RC_FAIL;
+
+    if( modem_get_mac_metadata( metadata ) )
+    {
+        rc = SMTC_MODEM_RC_OK;
+    }
+
+    return rc;
+}
+
 smtc_modem_return_code_t smtc_modem_get_status( uint8_t stack_id, smtc_modem_status_mask_t* status_mask )
 {
     UNUSED( stack_id );

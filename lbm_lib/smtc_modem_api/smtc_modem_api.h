@@ -356,6 +356,7 @@ typedef enum smtc_modem_event_type_e
     SMTC_MODEM_EVENT_RELAY_RX_RUNNING,  //!< Relay RX running has changed
     SMTC_MODEM_EVENT_TEST_MODE,
     SMTC_MODEM_EVENT_REGIONAL_DUTY_CYCLE,
+    SMTC_MODEM_EVENT_MAC,               //!< MAC command received (RSSI/SNR for stats)
     SMTC_MODEM_EVENT_MAX,
 } smtc_modem_event_type_t;
 
@@ -635,6 +636,22 @@ smtc_modem_return_code_t smtc_modem_get_event( smtc_modem_event_t* event, uint8_
 smtc_modem_return_code_t smtc_modem_get_downlink_data( uint8_t  buff[SMTC_MODEM_MAX_LORAWAN_PAYLOAD_LENGTH],
                                                        uint8_t* length, smtc_modem_dl_metadata_t* metadata,
                                                        uint8_t* remaining_data_nb );
+
+/**
+ * @brief Get metadata from MAC command downlinks
+ *
+ * @remark This function is used to retrieve RSSI/SNR metadata from MAC command downlinks
+ *         that would otherwise not be accessible to the application layer
+ *
+ * @param [out] metadata Structure holding MAC command downlink metadata
+ *
+ * @return Modem return code as defined in @ref smtc_modem_return_code_t
+ * @retval SMTC_MODEM_RC_OK            Command executed without errors
+ * @retval SMTC_MODEM_RC_INVALID       Parameter is NULL
+ * @retval SMTC_MODEM_RC_BUSY          Modem is currently in test mode
+ * @retval SMTC_MODEM_RC_FAIL          No MAC command metadata is available
+ */
+smtc_modem_return_code_t smtc_modem_get_mac_metadata( smtc_modem_dl_metadata_t* metadata );
 
 /*
  * -----------------------------------------------------------------------------

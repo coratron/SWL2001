@@ -241,6 +241,11 @@ void modem_reset_modem_context( void );
  */
 uint32_t modem_get_reset_counter( void );
 
+/**
+ * @brief Get MAC command metadata
+ */
+bool modem_get_mac_metadata( smtc_modem_dl_metadata_t* metadata );
+
 #ifdef __cplusplus
 }
 #endif

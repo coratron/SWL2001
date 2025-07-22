@@ -121,6 +121,8 @@ struct
     uint8_t ( *downlink_services_callback[NUMBER_OF_SERVICES + NUMBER_OF_LORAWAN_MANAGEMENT_TASKS] )(
         lr1_stack_mac_down_data_t* rx_down_data );
     uint32_t modem_reset_counter;
+    smtc_modem_dl_metadata_t last_mac_metadata;
+    bool                     mac_metadata_available;
 } modem_ctx_light;
 
 #define modem_dwn_pkt modem_ctx_light.modem_dwn_pkt
@@ -132,6 +134,8 @@ struct
 #define fifo_buffer modem_ctx_light.fifo_buffer
 #define downlink_services_callback modem_ctx_light.downlink_services_callback
 #define modem_reset_counter modem_ctx_light.modem_reset_counter
+#define last_mac_metadata modem_ctx_light.last_mac_metadata
+#define mac_metadata_available modem_ctx_light.mac_metadata_available
 
 /*
  * -----------------------------------------------------------------------------
@@ -239,6 +243,7 @@ void modem_context_init_light( void ( *callback )( void ), radio_planner_t* rp )
     is_modem_in_test_mode = false;
     user_alarm            = 0x7FFFFFFF;
     fifo_ctrl_init( &fifo_ctrl_obj, fifo_buffer, FIFO_LORAWAN_SIZE );
+    mac_metadata_available = false;
 
     // load modem context
     modem_load_modem_context( );
@@ -472,6 +477,17 @@ uint32_t modem_get_reset_counter( void )
     return modem_reset_counter;
 }
 
+bool modem_get_mac_metadata( smtc_modem_dl_metadata_t* metadata )
+{
+    if( ( metadata != NULL ) && mac_metadata_available )
+    {
+        *metadata = last_mac_metadata;
+        mac_metadata_available = false;  // Clear after reading (one-shot)
+        return true;
+    }
+    return false;
+}
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE FUNCTIONS DEFINITION --------------------------------------------
@@ -513,7 +529,7 @@ void modem_downlink_callback( lr1_stack_mac_down_data_t* rx_down_data )
         return;
     }
 
-    // none services used the downlink data for itself then push it into the user fifo
+    // Push application data into user fifo
     if( ( downlink_used_by_services == 0 ) && ( rx_down_data->rx_metadata.rx_fport != 0 ) )
     {
         if( fifo_ctrl_set( &fifo_ctrl_obj, rx_down_data->rx_payload, rx_down_data->rx_payload_size, &metadata,
@@ -527,6 +543,14 @@ void modem_downlink_callback( lr1_stack_mac_down_data_t* rx_down_data )
             increment_asynchronous_msgnumber( SMTC_MODEM_EVENT_DOWNDATA, 0, rx_down_data->stack_id );
             fifo_ctrl_print_stat( &fifo_ctrl_obj );
         }
+    }
+    // Expose MAC command metadata (fport == 0) for signal quality stats
+    else if( rx_down_data->rx_metadata.rx_fport == 0 )
+    {
+        // Store MAC metadata for dedicated MAC_METADATA event
+        last_mac_metadata = metadata;
+        mac_metadata_available = true;
+        increment_asynchronous_msgnumber( SMTC_MODEM_EVENT_MAC, 0, rx_down_data->stack_id );
     }
 }
 
