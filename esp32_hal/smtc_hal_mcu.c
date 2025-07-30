@@ -121,8 +121,11 @@ void hal_mcu_init(void)
     // Timer initialization will be done after interrupts are enabled
 }
 
-void hal_mcu_reset(void)
+__attribute__((weak)) void hal_mcu_reset(void)
 {
+#ifdef CONFIG_LBM_USE_CUSTOM_MCU_RESET
+    ESP_LOGW(TAG, "Custom MCU reset implementation should be provided. Using default fallback.");
+#endif
     ESP_LOGE(TAG, "MCU reset requested");
     esp_restart();
 }
@@ -200,8 +203,11 @@ void hal_mcu_enable_low_power_wait(void)
     ESP_LOGD(TAG, "Low power mode enabled");
 }
 
-void hal_mcu_panic(void)
+__attribute__((weak)) void hal_mcu_panic(void)
 {
+#ifdef CONFIG_LBM_USE_CUSTOM_MCU_RESET
+    ESP_LOGW(TAG, "Custom MCU panic implementation should be provided. Using default fallback.");
+#endif
     ESP_LOGE(TAG, "MCU panic requested - system will restart");
     esp_restart();
 }

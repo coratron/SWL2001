@@ -606,4 +606,19 @@ menu "LoRa Basics Modem SX127x Configuration"
                 Enable encryption for stored modem context data.
     endmenu
 
+    menu "MCU Reset Behavior"
+        config LBM_USE_CUSTOM_MCU_RESET
+            bool "Use Custom MCU Reset Implementation"
+            default n
+            help
+                Enable this option if you want to override the default MCU reset behavior.
+                When enabled, the weak smtc_modem_hal_reset_mcu() and hal_mcu_reset() 
+                functions can be overridden with strong definitions in your application 
+                code instead of calling esp_restart().
+                
+                This is useful when you want to restart only the LoRa task instead of 
+                the entire MCU when LBM requests a reset due to certification mode, 
+                panic conditions, or cloud device management commands.
+    endmenu
+
 endmenu

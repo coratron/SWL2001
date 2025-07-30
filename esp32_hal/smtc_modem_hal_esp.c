@@ -139,8 +139,11 @@ static void session_context_restore_from_nvs(void);
  */
 
 /* ------------ Reset management ------------*/
-void smtc_modem_hal_reset_mcu(void)
+__attribute__((weak)) void smtc_modem_hal_reset_mcu(void)
 {
+#ifdef CONFIG_LBM_USE_CUSTOM_MCU_RESET
+    ESP_LOGW(TAG, "Custom MCU reset implementation should be provided. Using default fallback.");
+#endif
     hal_mcu_reset();
 }
 
