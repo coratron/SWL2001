@@ -58,6 +58,19 @@
 #define PRINT_BUFFER_SIZE 512
 #define TAG "LBM_TRACE"
 
+// Trace level definitions (matching Kconfig)
+#define TRACE_LEVEL_NONE    0
+#define TRACE_LEVEL_ERROR   1
+#define TRACE_LEVEL_WARN    2
+#define TRACE_LEVEL_INFO    3
+#define TRACE_LEVEL_DEBUG   4
+#define TRACE_LEVEL_VERBOSE 5
+
+// Get the configured trace level from Kconfig
+#ifndef CONFIG_LBM_TRACE_LEVEL
+#define CONFIG_LBM_TRACE_LEVEL 3  // Default to INFO if not configured
+#endif
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE TYPES -----------------------------------------------------------
@@ -87,6 +100,12 @@ void hal_trace_print_var(const char *fmt, ...)
 
 void hal_trace_print(const char *fmt, va_list argp)
 {
+    // If trace level is NONE, don't print anything
+    if (CONFIG_LBM_TRACE_LEVEL == TRACE_LEVEL_NONE)
+    {
+        return;
+    }
+    
     char string[PRINT_BUFFER_SIZE];
     int len = vsnprintf(string, PRINT_BUFFER_SIZE, fmt, argp);
     
@@ -116,8 +135,39 @@ void hal_trace_print(const char *fmt, va_list argp)
         {
             string[len - 1] = '\0';
         }
-        // Use ESP-IDF logging system
-        ESP_LOGI(TAG, "%s", string);
+        
+        // Detect log level from message content and filter based on CONFIG_LBM_TRACE_LEVEL
+        // The LBM macros add "ERROR: ", "WARN: ", "INFO: " prefixes
+        if (strstr(string, "ERROR: ") != NULL)
+        {
+            if (CONFIG_LBM_TRACE_LEVEL >= TRACE_LEVEL_ERROR)
+            {
+                ESP_LOGE(TAG, "%s", string);
+            }
+        }
+        else if (strstr(string, "WARN: ") != NULL)
+        {
+            if (CONFIG_LBM_TRACE_LEVEL >= TRACE_LEVEL_WARN)
+            {
+                ESP_LOGW(TAG, "%s", string);
+            }
+        }
+        else if (strstr(string, "INFO: ") != NULL)
+        {
+            if (CONFIG_LBM_TRACE_LEVEL >= TRACE_LEVEL_INFO)
+            {
+                ESP_LOGI(TAG, "%s", string);
+            }
+        }
+        else
+        {
+            // Default to INFO level for messages without explicit level prefix
+            // This includes regular TRACE_PRINTF calls which are informational
+            if (CONFIG_LBM_TRACE_LEVEL >= TRACE_LEVEL_INFO)
+            {
+                ESP_LOGI(TAG, "%s", string);
+            }
+        }
     }
     // len == 0 case (empty string) - do nothing
 }
