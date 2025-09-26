@@ -379,7 +379,7 @@ menu "LoRa Basics Modem SX127x Configuration"
 
         choice LBM_SF_CONTROL_MODE
             prompt "LoRaWAN SF/ADR Control Mode"
-            default LBM_SF_CONTROL_GUI
+            default LBM_SF_CONTROL_ADR
             help
                 Select how spreading factor (SF) and data rate are controlled.
 
