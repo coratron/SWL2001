@@ -39,6 +39,8 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
+#include <stdlib.h>   // malloc
+#include <string.h>   // memset
 
 #include "smtc_modem_api.h"
 #include "smtc_modem_test_api.h"
@@ -184,7 +186,7 @@ typedef struct modem_key_ctx_s
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
 
-radio_planner_t modem_radio_planner;
+static radio_planner_t* modem_radio_planner = NULL;
 
 #if defined( SX128X )
 ralf_t modem_radio = RALF_SX128X_INSTANTIATE( NULL );
@@ -252,18 +254,27 @@ void smtc_modem_init( void ( *callback_event )( void ) )
     SMTC_MODEM_HAL_PANIC_ON_FAILURE( ral_init( &( modem_radio.ral ) ) == RAL_STATUS_OK );
     SMTC_MODEM_HAL_PANIC_ON_FAILURE( ral_set_sleep( &( modem_radio.ral ), true ) == RAL_STATUS_OK );
     smtc_modem_hal_set_ant_switch( false );
+
+    // Allocate radio planner (one-time boot allocation)
+    if( modem_radio_planner == NULL )
+    {
+        modem_radio_planner = ( radio_planner_t* )malloc( sizeof( radio_planner_t ) );
+        SMTC_MODEM_HAL_PANIC_ON_FAILURE( modem_radio_planner != NULL );
+        memset( modem_radio_planner, 0, sizeof( radio_planner_t ) );
+    }
+
     // init radio planner and attach corresponding radio irq
-    rp_init( &modem_radio_planner, &modem_radio );
+    rp_init( modem_radio_planner, &modem_radio );
 
-    smtc_modem_hal_irq_config_radio_irq( rp_radio_irq_callback, &modem_radio_planner );
+    smtc_modem_hal_irq_config_radio_irq( rp_radio_irq_callback, modem_radio_planner );
 
-    rp_hook_init( &modem_radio_planner, RP_HOOK_ID_SUSPEND, ( void ( * )( void* ) )( empty_callback ),
-                  &modem_radio_planner );
+    rp_hook_init( modem_radio_planner, RP_HOOK_ID_SUSPEND, ( void ( * )( void* ) )( empty_callback ),
+                  modem_radio_planner );
 
     smtc_secure_element_init( );
     modem_supervisor_init( );
-    modem_context_init_light( callback_event, &modem_radio_planner );
-    modem_tx_protocol_manager_init( &modem_radio_planner );
+    modem_context_init_light( callback_event, modem_radio_planner );
+    modem_tx_protocol_manager_init( modem_radio_planner );
     // If lr11xx crypto engine is used for crypto
 #if defined( USE_LR11XX_CE )
     modem_load_appkey_context( );
@@ -274,7 +285,7 @@ void smtc_modem_init( void ( *callback_event )( void ) )
 
 uint32_t smtc_modem_run_engine( void )
 {
-    rp_callback( &modem_radio_planner );
+    rp_callback( modem_radio_planner );
     return modem_supervisor_engine( );
 }
 
@@ -299,7 +310,7 @@ const void* smtc_modem_get_radio_context( void )
 
 bool smtc_modem_is_irq_flag_pending( void )
 {
-    return rp_get_irq_flag( &modem_radio_planner );
+    return rp_get_irq_flag( modem_radio_planner );
 }
 
 /* ------------ Modem Generic Api ------------*/
@@ -1137,7 +1148,7 @@ smtc_modem_return_code_t smtc_modem_suspend_radio_communications( bool suspend )
             lorawan_api_core_abort( i );
         }
         // First disable failsafe check for radio planner as the suspended task can be longer than failsafe value
-        rp_disable_failsafe( &modem_radio_planner, true );
+        rp_disable_failsafe( modem_radio_planner, true );
         local_rc = modem_suspend_radio_access( );
         local_rc = modem_resume_radio_access( );
         local_rc = modem_suspend_radio_access( );
@@ -1146,7 +1157,7 @@ smtc_modem_return_code_t smtc_modem_suspend_radio_communications( bool suspend )
     {
         local_rc = modem_resume_radio_access( );
         // Re enable failsafe on radio planner
-        rp_disable_failsafe( &modem_radio_planner, false );
+        rp_disable_failsafe( modem_radio_planner, false );
     }
 
     return ( local_rc == true ) ? SMTC_MODEM_RC_OK : SMTC_MODEM_RC_FAIL;
@@ -1479,7 +1490,7 @@ smtc_modem_return_code_t smtc_modem_get_charge( uint32_t* charge_mah )
 {
     RETURN_INVALID_IF_NULL( charge_mah );
 
-    *charge_mah = rp_stats_get_charge_mah( &modem_radio_planner.stats );
+    *charge_mah = rp_stats_get_charge_mah( &modem_radio_planner->stats );
 
     return SMTC_MODEM_RC_OK;
 }
@@ -1493,45 +1504,45 @@ smtc_modem_return_code_t smtc_modem_get_rp_stats_to_array( uint8_t* stats_array,
 
     for( uint8_t i = 0; i < RP_NB_HOOKS; i++ )
     {
-        stats_array[*stats_array_length + 0] = ( modem_radio_planner.stats.tx_last_toa_ms[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 1] = ( modem_radio_planner.stats.tx_last_toa_ms[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 2] = ( modem_radio_planner.stats.tx_last_toa_ms[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 3] = ( modem_radio_planner.stats.tx_last_toa_ms[i] & 0xFF );
+        stats_array[*stats_array_length + 0] = ( modem_radio_planner->stats.tx_last_toa_ms[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 1] = ( modem_radio_planner->stats.tx_last_toa_ms[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 2] = ( modem_radio_planner->stats.tx_last_toa_ms[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 3] = ( modem_radio_planner->stats.tx_last_toa_ms[i] & 0xFF );
 
-        stats_array[*stats_array_length + 4] = ( modem_radio_planner.stats.rx_last_toa_ms[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 5] = ( modem_radio_planner.stats.rx_last_toa_ms[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 6] = ( modem_radio_planner.stats.rx_last_toa_ms[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 7] = ( modem_radio_planner.stats.rx_last_toa_ms[i] & 0xFF );
+        stats_array[*stats_array_length + 4] = ( modem_radio_planner->stats.rx_last_toa_ms[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 5] = ( modem_radio_planner->stats.rx_last_toa_ms[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 6] = ( modem_radio_planner->stats.rx_last_toa_ms[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 7] = ( modem_radio_planner->stats.rx_last_toa_ms[i] & 0xFF );
 
-        stats_array[*stats_array_length + 8]  = ( modem_radio_planner.stats.tx_consumption_ms[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 9]  = ( modem_radio_planner.stats.tx_consumption_ms[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 10] = ( modem_radio_planner.stats.tx_consumption_ms[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 11] = ( modem_radio_planner.stats.tx_consumption_ms[i] & 0xFF );
+        stats_array[*stats_array_length + 8]  = ( modem_radio_planner->stats.tx_consumption_ms[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 9]  = ( modem_radio_planner->stats.tx_consumption_ms[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 10] = ( modem_radio_planner->stats.tx_consumption_ms[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 11] = ( modem_radio_planner->stats.tx_consumption_ms[i] & 0xFF );
 
-        stats_array[*stats_array_length + 12] = ( modem_radio_planner.stats.rx_consumption_ms[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 13] = ( modem_radio_planner.stats.rx_consumption_ms[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 14] = ( modem_radio_planner.stats.rx_consumption_ms[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 15] = ( modem_radio_planner.stats.rx_consumption_ms[i] & 0xFF );
+        stats_array[*stats_array_length + 12] = ( modem_radio_planner->stats.rx_consumption_ms[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 13] = ( modem_radio_planner->stats.rx_consumption_ms[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 14] = ( modem_radio_planner->stats.rx_consumption_ms[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 15] = ( modem_radio_planner->stats.rx_consumption_ms[i] & 0xFF );
 
-        stats_array[*stats_array_length + 16] = ( modem_radio_planner.stats.none_consumption_ms[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 17] = ( modem_radio_planner.stats.none_consumption_ms[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 18] = ( modem_radio_planner.stats.none_consumption_ms[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 19] = ( modem_radio_planner.stats.none_consumption_ms[i] & 0xFF );
+        stats_array[*stats_array_length + 16] = ( modem_radio_planner->stats.none_consumption_ms[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 17] = ( modem_radio_planner->stats.none_consumption_ms[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 18] = ( modem_radio_planner->stats.none_consumption_ms[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 19] = ( modem_radio_planner->stats.none_consumption_ms[i] & 0xFF );
 
-        stats_array[*stats_array_length + 20] = ( modem_radio_planner.stats.tx_consumption_ma[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 21] = ( modem_radio_planner.stats.tx_consumption_ma[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 22] = ( modem_radio_planner.stats.tx_consumption_ma[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 23] = ( modem_radio_planner.stats.tx_consumption_ma[i] & 0xFF );
+        stats_array[*stats_array_length + 20] = ( modem_radio_planner->stats.tx_consumption_ma[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 21] = ( modem_radio_planner->stats.tx_consumption_ma[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 22] = ( modem_radio_planner->stats.tx_consumption_ma[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 23] = ( modem_radio_planner->stats.tx_consumption_ma[i] & 0xFF );
 
-        stats_array[*stats_array_length + 24] = ( modem_radio_planner.stats.rx_consumption_ma[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 25] = ( modem_radio_planner.stats.rx_consumption_ma[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 26] = ( modem_radio_planner.stats.rx_consumption_ma[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 27] = ( modem_radio_planner.stats.rx_consumption_ma[i] & 0xFF );
+        stats_array[*stats_array_length + 24] = ( modem_radio_planner->stats.rx_consumption_ma[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 25] = ( modem_radio_planner->stats.rx_consumption_ma[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 26] = ( modem_radio_planner->stats.rx_consumption_ma[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 27] = ( modem_radio_planner->stats.rx_consumption_ma[i] & 0xFF );
 
-        stats_array[*stats_array_length + 28] = ( modem_radio_planner.stats.none_consumption_ma[i] >> 24 ) & 0xFF;
-        stats_array[*stats_array_length + 29] = ( modem_radio_planner.stats.none_consumption_ma[i] >> 16 ) & 0xFF;
-        stats_array[*stats_array_length + 30] = ( modem_radio_planner.stats.none_consumption_ma[i] >> 8 ) & 0xFF;
-        stats_array[*stats_array_length + 31] = ( modem_radio_planner.stats.none_consumption_ma[i] & 0xFF );
+        stats_array[*stats_array_length + 28] = ( modem_radio_planner->stats.none_consumption_ma[i] >> 24 ) & 0xFF;
+        stats_array[*stats_array_length + 29] = ( modem_radio_planner->stats.none_consumption_ma[i] >> 16 ) & 0xFF;
+        stats_array[*stats_array_length + 30] = ( modem_radio_planner->stats.none_consumption_ma[i] >> 8 ) & 0xFF;
+        stats_array[*stats_array_length + 31] = ( modem_radio_planner->stats.none_consumption_ma[i] & 0xFF );
 
         *stats_array_length += 32;
     }
@@ -1541,7 +1552,7 @@ smtc_modem_return_code_t smtc_modem_get_rp_stats_to_array( uint8_t* stats_array,
 
 smtc_modem_return_code_t smtc_modem_reset_charge( void )
 {
-    rp_stats_init( &modem_radio_planner.stats );
+    rp_stats_init( &modem_radio_planner->stats );
     return SMTC_MODEM_RC_OK;
 }
 

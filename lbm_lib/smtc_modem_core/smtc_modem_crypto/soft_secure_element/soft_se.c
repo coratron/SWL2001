@@ -49,6 +49,7 @@
 #include "smtc_modem_hal_dbg_trace.h"
 
 #include <string.h>  //for memset, memcpy
+#include <stdlib.h>  // malloc
 
 /*
  * -----------------------------------------------------------------------------
@@ -352,7 +353,7 @@ typedef struct soft_se_context_nvm_s
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
 
-static soft_se_data_t soft_se_data[NUMBER_OF_STACKS] = { 0 };
+static soft_se_data_t* soft_se_data = NULL;
 
 /*
  * -----------------------------------------------------------------------------
@@ -404,6 +405,14 @@ uint32_t soft_ce_crc( const uint8_t* buf, int len );
 
 smtc_se_return_code_t smtc_secure_element_init( void )
 {
+    // Allocate secure element data (one-time boot allocation)
+    if( soft_se_data == NULL )
+    {
+        soft_se_data = ( soft_se_data_t* )malloc( NUMBER_OF_STACKS * sizeof( soft_se_data_t ) );
+        SMTC_MODEM_HAL_PANIC_ON_FAILURE( soft_se_data != NULL );
+        memset( soft_se_data, 0, NUMBER_OF_STACKS * sizeof( soft_se_data_t ) );
+    }
+
     soft_se_data_t local_data = { .deveui   = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
                                   .joineui  = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
                                   .pin      = { 0x00, 0x00, 0x00, 0x00 },

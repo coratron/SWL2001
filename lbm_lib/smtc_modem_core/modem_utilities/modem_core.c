@@ -39,6 +39,8 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
+#include <stdlib.h>   // malloc
+#include <string.h>   // memset
 
 #include "modem_core.h"
 #include "modem_event_utilities.h"
@@ -109,7 +111,7 @@ typedef struct modem_ctx_s
  * -----------------------------------------------------------------------------
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
-struct
+typedef struct
 {
     modem_downlink_msg_t modem_dwn_pkt;
     radio_planner_t*     modem_rp;
@@ -123,19 +125,21 @@ struct
     uint32_t modem_reset_counter;
     smtc_modem_dl_metadata_t last_mac_metadata;
     bool                     mac_metadata_available;
-} modem_ctx_light;
+} modem_ctx_light_t;
 
-#define modem_dwn_pkt modem_ctx_light.modem_dwn_pkt
-#define modem_rp modem_ctx_light.modem_rp
-#define modem_radio_ctx modem_ctx_light.modem_radio_ctx
-#define is_modem_in_test_mode modem_ctx_light.is_modem_in_test_mode
-#define user_alarm modem_ctx_light.user_alarm
-#define fifo_ctrl_obj modem_ctx_light.fifo_ctrl_obj
-#define fifo_buffer modem_ctx_light.fifo_buffer
-#define downlink_services_callback modem_ctx_light.downlink_services_callback
-#define modem_reset_counter modem_ctx_light.modem_reset_counter
-#define last_mac_metadata modem_ctx_light.last_mac_metadata
-#define mac_metadata_available modem_ctx_light.mac_metadata_available
+static modem_ctx_light_t* modem_ctx_light = NULL;
+
+#define modem_dwn_pkt modem_ctx_light->modem_dwn_pkt
+#define modem_rp modem_ctx_light->modem_rp
+#define modem_radio_ctx modem_ctx_light->modem_radio_ctx
+#define is_modem_in_test_mode modem_ctx_light->is_modem_in_test_mode
+#define user_alarm modem_ctx_light->user_alarm
+#define fifo_ctrl_obj modem_ctx_light->fifo_ctrl_obj
+#define fifo_buffer modem_ctx_light->fifo_buffer
+#define downlink_services_callback modem_ctx_light->downlink_services_callback
+#define modem_reset_counter modem_ctx_light->modem_reset_counter
+#define last_mac_metadata modem_ctx_light->last_mac_metadata
+#define mac_metadata_available modem_ctx_light->mac_metadata_available
 
 /*
  * -----------------------------------------------------------------------------
@@ -151,6 +155,14 @@ static void modem_downlink_callback( lr1_stack_mac_down_data_t* rx_down_data );
 
 void modem_context_init_light( void ( *callback )( void ), radio_planner_t* rp )
 {
+    // Allocate modem context (one-time boot allocation)
+    if( modem_ctx_light == NULL )
+    {
+        modem_ctx_light = ( modem_ctx_light_t* )malloc( sizeof( modem_ctx_light_t ) );
+        SMTC_MODEM_HAL_PANIC_ON_FAILURE( modem_ctx_light != NULL );
+        memset( modem_ctx_light, 0, sizeof( modem_ctx_light_t ) );
+    }
+
     void ( *callback_on_launch_temp )( void* );
     void ( *callback_on_update_temp )( void* );
     void* context_callback_tmp;

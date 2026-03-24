@@ -37,6 +37,7 @@
  */
 #include <stdint.h>  // C99 types
 #include <string.h>
+#include <stdlib.h>  // malloc
 
 #include "modem_core.h"
 #include "modem_supervisor_light.h"
@@ -113,8 +114,8 @@ typedef struct stream_service_ctx_s
  * --- PRIVATE VARIABLES -------------------------------------------------------
  */
 
-static stream_service_ctx_t stream_service_ctx;
-#define stream_ctx stream_service_ctx.stream_ctx
+static stream_service_ctx_t* stream_service_ctx = NULL;
+#define stream_ctx stream_service_ctx->stream_ctx
 
 /*
  * -----------------------------------------------------------------------------
@@ -183,6 +184,14 @@ void stream_services_init( uint8_t* service_id, uint8_t task_id,
                            void ( **on_launch_callback )( void* ), void ( **on_update_callback )( void* ),
                            void** context_callback )
 {
+    // Allocate stream context (one-time boot allocation)
+    if( stream_service_ctx == NULL )
+    {
+        stream_service_ctx = ( stream_service_ctx_t* )malloc( sizeof( stream_service_ctx_t ) );
+        SMTC_MODEM_HAL_PANIC_ON_FAILURE( stream_service_ctx != NULL );
+        memset( stream_service_ctx, 0, sizeof( stream_service_ctx_t ) );
+    }
+
     stream_ctx_t* ctx = &stream_ctx[*service_id];
     memset( ctx, 0, sizeof( stream_ctx_t ) );
 

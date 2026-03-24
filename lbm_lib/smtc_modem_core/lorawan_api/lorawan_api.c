@@ -39,6 +39,8 @@
 
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
+#include <stdlib.h>   // malloc
+#include <string.h>   // memset
 
 #include "smtc_modem_hal.h"
 #include "smtc_modem_hal_dbg_trace.h"
@@ -74,7 +76,7 @@
 #include "smtc_modem_crypto.h"
 #include "lorawan_api.h"
 
-static struct
+typedef struct
 {
     lr1_stack_mac_t lr1_mac_obj[NUMBER_OF_STACKS];
     smtc_real_t     real_obj[NUMBER_OF_STACKS];
@@ -92,26 +94,36 @@ static struct
     smtc_multicast_t multicast_obj[NUMBER_OF_STACKS];
 #endif  // SMTC_MULTICAST
 
-} lr1mac_core_context;
+} lr1mac_core_context_t;
+
+static lr1mac_core_context_t* lr1mac_core_context = NULL;
 
 lorawan_down_metadata_t lorawan_down_metadata;
 
-#define lr1_mac_obj lr1mac_core_context.lr1_mac_obj
+#define lr1_mac_obj lr1mac_core_context->lr1_mac_obj
 
-#define real_obj lr1mac_core_context.real_obj
-#define class_c_obj lr1mac_core_context.class_c_obj
+#define real_obj lr1mac_core_context->real_obj
+#define class_c_obj lr1mac_core_context->class_c_obj
 
-#define lr1_beacon_obj lr1mac_core_context.lr1_beacon_obj
-#define ping_slot_obj lr1mac_core_context.ping_slot_obj
+#define lr1_beacon_obj lr1mac_core_context->lr1_beacon_obj
+#define ping_slot_obj lr1mac_core_context->ping_slot_obj
 
 #if defined( SMTC_MULTICAST )
-#define multicast_obj lr1mac_core_context.multicast_obj
+#define multicast_obj lr1mac_core_context->multicast_obj
 #endif
 
 void lorawan_api_init( radio_planner_t* rp, uint8_t stack_id,
                        void ( *lr1mac_downlink_callback )( lr1_stack_mac_down_data_t* push_context ) )
 {
     PANIC_IF_STACK_ID_TOO_HIGH( stack_id );
+
+    // Allocate LoRaWAN context (one-time boot allocation)
+    if( lr1mac_core_context == NULL )
+    {
+        lr1mac_core_context = ( lr1mac_core_context_t* )malloc( sizeof( lr1mac_core_context_t ) );
+        SMTC_MODEM_HAL_PANIC_ON_FAILURE( lr1mac_core_context != NULL );
+        memset( lr1mac_core_context, 0, sizeof( lr1mac_core_context_t ) );
+    }
 
     lr1mac_core_init( &lr1_mac_obj[stack_id], &real_obj[stack_id], rp, ACTIVATION_MODE_OTAA, lr1mac_downlink_callback,
                       &stack_id );
