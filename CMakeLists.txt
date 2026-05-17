@@ -235,6 +235,7 @@ set(COMPONENT_REQUIRES
     esp_timer
     nvs_flash
     log
+    lora_hal
 )
 
 # Register component with compile definitions

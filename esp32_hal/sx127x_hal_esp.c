@@ -21,6 +21,7 @@
 #include "sx127x_hal.h"
 #include "sx127x_esp_wrapper.h"
 #include "sx127x_esp_internal.h"
+#include "lora_hal_lbm_audit.h"
 
 static const char *TAG = "sx127x_hal_esp";
 
@@ -431,6 +432,9 @@ void sx127x_hal_reset(const sx127x_t *radio)
             ESP_LOGE(TAG, "Still invalid radio context after initialization");
             return;
         }
+
+        /* Audit log: verify radio chip presence and log variant (SX1276/SX1272) */
+        lora_hal_lbm_audit_log_version(ctx->spi_device);
     }
 
     ESP_LOGI(TAG, "Resetting SX127x radio");
