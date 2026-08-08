@@ -92,6 +92,21 @@ void sx127x_hal_dio_irq_attach(const sx127x_t *radio)
         return;
     }
 
+    /* Boot-time collision guard (Issue #332): Ensure DIO0, DIO1, DIO2 use distinct GPIOs.
+     * ESP-IDF gpio_isr_handler_add() silently overwrites on duplicate GPIO, so a config
+     * collision (e.g., DIO2=26 == DIO0=26) replaces DIO0's TX_DONE/RX_DONE handler with
+     * DIO2's no-op, wedging the LoRa stack in LWPSTATE_SEND → LBM failsafe panic loop. */
+    if ((ctx->dio_pins[0] == ctx->dio_pins[1]) ||
+        (ctx->dio_pins[0] == ctx->dio_pins[2]) ||
+        (ctx->dio_pins[1] == ctx->dio_pins[2]))
+    {
+        ESP_LOGE(TAG,
+                 "DIO pin collision detected: DIO0=%d, DIO1=%d, DIO2=%d. "
+                 "Each DIO must use a distinct GPIO. Check CONFIG_LBM_SX127X_DIO{0,1,2}_GPIO.",
+                 ctx->dio_pins[0], ctx->dio_pins[1], ctx->dio_pins[2]);
+        return;
+    }
+
     // Store callbacks from radio structure
     ctx->dio_callbacks[0] = radio->dio_0_irq_handler;
     ctx->dio_callbacks[1] = radio->dio_1_irq_handler;
