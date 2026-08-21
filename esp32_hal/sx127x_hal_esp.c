@@ -536,26 +536,48 @@ uint32_t sx127x_hal_get_dio_1_pin_state(const sx127x_t *radio)
 static void sx127x_esp_rx_timer_callback(void *arg)
 {
     sx127x_esp_context_t *ctx = (sx127x_esp_context_t *)arg;
+    /* Defensive guard - should never be NULL as arg is set at timer creation (F11) */
     if (!ctx)
     {
         return;
     }
 
-    /* Read started flag and generation counter under lock */
+    /* Read started flag, generation counter, deadline, and deinit flag under lock */
     bool started;
     uint32_t gen;
+    int64_t deadline_us;
+    bool deiniting;
+    int64_t now_us = esp_timer_get_time();
+
     portENTER_CRITICAL(&ctx->rx_timer_lock);
     started = ctx->rx_timer_started;
     gen = ctx->rx_timer_gen;
+    deadline_us = ctx->rx_timer_deadline_us;
+    deiniting = ctx->rx_timer_deiniting;
     if (started)
     {
         ctx->rx_timer_started = false;
     }
     portEXIT_CRITICAL(&ctx->rx_timer_lock);
 
+    /* F1: Bail if deinit is in progress - queue/task are being torn down */
+    if (deiniting)
+    {
+        ESP_LOGD(TAG, "RX timeout callback during deinit - ignoring");
+        return;
+    }
+
     if (!started)
     {
         /* Timer was stopped before expiry - stale callback */
+        return;
+    }
+
+    /* F2: Stale dispatch race - drop if expiry arrived before deadline */
+    if (now_us < deadline_us - 1000)
+    {
+        ESP_LOGD(TAG, "Stale RX timeout expiry (now=%" PRId64 ", deadline=%" PRId64 ") - ignoring",
+                 now_us, deadline_us);
         return;
     }
 
@@ -599,27 +621,44 @@ static void sx127x_esp_warn_no_event_queue(void)
 }
 
 /**
- * @brief Create RX timeout timer (lazy initialization helper)
+ * @brief Create RX timeout timer (F3: called eagerly from init)
  */
-static sx127x_hal_status_t sx127x_esp_create_rx_timer(sx127x_esp_context_t *ctx)
+sx127x_esp_err_t sx127x_esp_create_rx_timer(sx127x_esp_context_t *ctx)
 {
     const esp_timer_create_args_t timer_args = {
         .callback = sx127x_esp_rx_timer_callback,
         .arg = ctx,
         .dispatch_method = ESP_TIMER_TASK,
         .name = "sx127x_rx_timeout",
-        .skip_unhandled_events = false
+        .skip_unhandled_events = true  /* F5: Drop expired events in queue */
     };
 
     esp_err_t ret = esp_timer_create(&timer_args, &ctx->rx_timer);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to create RX timeout timer: %s", esp_err_to_name(ret));
-        return SX127X_HAL_STATUS_ERROR;
+        return SX127X_ESP_ERR_NO_MEM;
     }
 
     ESP_LOGI(TAG, "SX127x RX timeout timer created (Class C support)");
-    return SX127X_HAL_STATUS_OK;
+    return SX127X_ESP_OK;
+}
+
+/**
+ * @brief Log first-use message (F8: helper to reduce timer_start CCN)
+ */
+static void sx127x_esp_log_first_timer_use(uint32_t time_in_ms)
+{
+    static bool first_use = true;
+    if (first_use)
+    {
+        ESP_LOGI(TAG, "SX127x SW RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
+        first_use = false;
+    }
+    else
+    {
+        ESP_LOGD(TAG, "SX127x RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
+    }
 }
 
 /**
@@ -641,8 +680,9 @@ sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t
 
     if (!callback || time_in_ms == 0U)
     {
-        ESP_LOGE(TAG, "Invalid timer parameters: callback=%p, time=%" PRIu32 " ms",
-                 (void *)callback, time_in_ms);
+        /* F7: Avoid function pointer cast - log presence instead */
+        ESP_LOGE(TAG, "Invalid timer parameters: callback=%s, time=%" PRIu32 " ms",
+                 callback ? "set" : "NULL", time_in_ms);
         return SX127X_HAL_STATUS_ERROR;
     }
 
@@ -651,26 +691,29 @@ sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t
         sx127x_esp_warn_no_event_queue();
     }
 
+    /* F3: Timer is now created eagerly in init - error if NULL */
     if (ctx->rx_timer == NULL)
     {
-        if (sx127x_esp_create_rx_timer(ctx) != SX127X_HAL_STATUS_OK)
-        {
-            return SX127X_HAL_STATUS_ERROR;
-        }
+        ESP_LOGE(TAG, "RX timer not initialized - init failed or not called");
+        return SX127X_HAL_STATUS_ERROR;
     }
 
     /* Stop timer outside critical section (esp_timer_stop takes internal lock) */
     (void)esp_timer_stop(ctx->rx_timer);
 
-    /* Update state under critical section */
+    /* Update state under critical section - F2: set deadline for stale-dispatch detection */
+    uint64_t timeout_us = (uint64_t)time_in_ms * 1000ULL;
+    int64_t now_us = esp_timer_get_time();
+    int64_t deadline_us = now_us + (int64_t)timeout_us;
+
     portENTER_CRITICAL(&ctx->rx_timer_lock);
     ctx->rx_timer_callback = callback;
     ctx->rx_timer_gen++;
+    ctx->rx_timer_deadline_us = deadline_us;
     ctx->rx_timer_started = true;
     portEXIT_CRITICAL(&ctx->rx_timer_lock);
 
     /* Start timer outside critical section */
-    uint64_t timeout_us = (uint64_t)time_in_ms * 1000ULL;
     esp_err_t ret = esp_timer_start_once(ctx->rx_timer, timeout_us);
     if (ret != ESP_OK)
     {
@@ -682,16 +725,8 @@ sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t
         return SX127X_HAL_STATUS_ERROR;
     }
 
-    static bool first_use = true;
-    if (first_use)
-    {
-        ESP_LOGI(TAG, "SX127x SW RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
-        first_use = false;
-    }
-    else
-    {
-        ESP_LOGD(TAG, "SX127x RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
-    }
+    /* F8: First-use logging hoisted to helper */
+    sx127x_esp_log_first_timer_use(time_in_ms);
 
     return SX127X_HAL_STATUS_OK;
 }

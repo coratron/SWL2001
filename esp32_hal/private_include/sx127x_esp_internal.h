@@ -84,6 +84,8 @@ typedef struct {
   void (*rx_timer_callback)(void *context);
   volatile bool rx_timer_started;
   volatile uint32_t rx_timer_gen;
+  volatile int64_t rx_timer_deadline_us; ///< Deadline (us) to detect stale expiry (F2)
+  volatile bool rx_timer_deiniting;      ///< Deinit guard for callback (F1)
   portMUX_TYPE rx_timer_lock;
 
   // Configuration
@@ -229,6 +231,14 @@ sx127x_esp_err_t sx127x_esp_convert_error(esp_err_t esp_err);
  * @return sx127x_esp_err_t Error code
  */
 sx127x_esp_err_t sx127x_esp_validate_config(const sx127x_esp_config_t *config);
+
+/**
+ * @brief Create RX timeout timer (F3: eager creation)
+ *
+ * @param ctx ESP32 context
+ * @return sx127x_esp_err_t Error code
+ */
+sx127x_esp_err_t sx127x_esp_create_rx_timer(sx127x_esp_context_t *ctx);
 
 #ifdef __cplusplus
 }

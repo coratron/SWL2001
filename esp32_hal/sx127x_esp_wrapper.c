@@ -288,6 +288,14 @@ sx127x_esp_err_t sx127x_esp_init(sx127x_t *radio, const sx127x_esp_config_t *con
     s_radio_context.config = *config;
     portMUX_INITIALIZE(&s_radio_context.rx_timer_lock);
 
+    /* F3: Create RX timer unconditionally (eager, not lazy) */
+    err = sx127x_esp_create_rx_timer(&s_radio_context);
+    if (err != SX127X_ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create RX timeout timer during init");
+        return err;
+    }
+
     // Create mutexes
     s_radio_context.spi_mutex = xSemaphoreCreateMutex();
     s_radio_context.state_mutex = xSemaphoreCreateMutex();
@@ -355,6 +363,21 @@ sx127x_esp_err_t sx127x_esp_deinit(sx127x_t *radio)
         return SX127X_ESP_ERR_NOT_INITIALIZED;
     }
 
+    /* F1: Delete RX timer BEFORE queue/task to prevent callback racing with deinit */
+    if (ctx->rx_timer)
+    {
+        /* Set deiniting flag under lock so callback can bail */
+        portENTER_CRITICAL(&ctx->rx_timer_lock);
+        ctx->rx_timer_deiniting = true;
+        portEXIT_CRITICAL(&ctx->rx_timer_lock);
+
+        /* Stop and delete timer */
+        esp_timer_stop(ctx->rx_timer);
+        esp_timer_delete(ctx->rx_timer);
+        ctx->rx_timer = NULL;
+    }
+    ctx->rx_timer_started = false;
+
     // Stop event task if running
     if (ctx->event_task)
     {
@@ -390,15 +413,6 @@ sx127x_esp_err_t sx127x_esp_deinit(sx127x_t *radio)
         vSemaphoreDelete(ctx->state_mutex);
         ctx->state_mutex = NULL;
     }
-
-    // Delete RX timeout timer
-    if (ctx->rx_timer)
-    {
-        esp_timer_stop(ctx->rx_timer);
-        esp_timer_delete(ctx->rx_timer);
-        ctx->rx_timer = NULL;
-    }
-    ctx->rx_timer_started = false;
 
     // Clear context
     ctx->initialized = false;
@@ -467,6 +481,34 @@ const char *sx127x_esp_err_to_string(sx127x_esp_err_t err)
 }
 
 /**
+ * @brief Handle synthetic RX timer event (F4: extracted to reduce event_task CCN)
+ */
+static void sx127x_esp_handle_rx_timer_event(sx127x_esp_context_t *ctx, const sx127x_esp_dio_event_t *event)
+{
+    void (*callback)(void *context) = NULL;
+    uint32_t current_gen;
+
+    /* Read callback and current generation under lock */
+    portENTER_CRITICAL(&ctx->rx_timer_lock);
+    callback = ctx->rx_timer_callback;
+    current_gen = ctx->rx_timer_gen;
+    portEXIT_CRITICAL(&ctx->rx_timer_lock);
+
+    if (callback != NULL && event->gen == current_gen)
+    {
+        /* Valid event - invoke driver's RX timeout handler */
+        callback(ctx->radio);
+        ESP_LOGD(TAG, "RX timeout delivered (gen=%" PRIu32 ")", event->gen);
+    }
+    else
+    {
+        /* Stale event - ignore */
+        ESP_LOGD(TAG, "Stale RX timeout event (gen=%" PRIu32 ", current=%" PRIu32 ")",
+                 event->gen, current_gen);
+    }
+}
+
+/**
  * @brief Event processing task
  */
 void sx127x_esp_event_task(void *pvParameters)
@@ -481,7 +523,15 @@ void sx127x_esp_event_task(void *pvParameters)
         if (xQueueReceive(ctx->event_queue, &event, portMAX_DELAY))
         {
 #ifdef CONFIG_LBM_SX127X_DEBUG_INTERRUPTS
-            ESP_LOGD(TAG, "Processing DIO%d interrupt at %llu us", event.dio_num, event.timestamp);
+            /* F10: Distinguish synthetic RX timer event from DIO interrupts, use PRIu64 */
+            if (event.dio_num == SX127X_ESP_EVENT_RX_TIMER)
+            {
+                ESP_LOGD(TAG, "Processing RX timeout event (synthetic) at %" PRIu64 " us", event.timestamp);
+            }
+            else
+            {
+                ESP_LOGD(TAG, "Processing DIO%d interrupt at %" PRIu64 " us", event.dio_num, event.timestamp);
+            }
 #endif
 
 #ifdef CONFIG_LBM_SX127X_INTERRUPT_STATS
@@ -491,30 +541,10 @@ void sx127x_esp_event_task(void *pvParameters)
             }
 #endif
 
-            /* Handle synthetic RX timeout event */
+            /* Handle synthetic RX timeout event (F4: extracted to reduce CCN) */
             if (event.dio_num == SX127X_ESP_EVENT_RX_TIMER)
             {
-                void (*callback)(void *context) = NULL;
-                uint32_t current_gen;
-
-                /* Read callback and current generation under lock */
-                portENTER_CRITICAL(&ctx->rx_timer_lock);
-                callback = ctx->rx_timer_callback;
-                current_gen = ctx->rx_timer_gen;
-                portEXIT_CRITICAL(&ctx->rx_timer_lock);
-
-                if (callback != NULL && event.gen == current_gen)
-                {
-                    /* Valid event - invoke driver's RX timeout handler */
-                    callback(ctx->radio);
-                    ESP_LOGD(TAG, "RX timeout delivered (gen=%" PRIu32 ")", event.gen);
-                }
-                else
-                {
-                    /* Stale event - ignore */
-                    ESP_LOGD(TAG, "Stale RX timeout event (gen=%" PRIu32 ", current=%" PRIu32 ")",
-                             event.gen, current_gen);
-                }
+                sx127x_esp_handle_rx_timer_event(ctx, &event);
             }
             /* Handle hardware DIO interrupts */
             else if (event.dio_num < 3 && ctx->dio_callbacks[event.dio_num])
