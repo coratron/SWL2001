@@ -28,9 +28,15 @@ extern "C" {
  * @brief DIO interrupt event structure
  */
 typedef struct {
-  uint8_t dio_num;    ///< DIO pin number (0, 1, or 2)
+  uint8_t dio_num;    ///< DIO pin number (0, 1, 2) or SX127X_ESP_EVENT_RX_TIMER
   uint64_t timestamp; ///< Timestamp when interrupt occurred (us)
+  uint32_t gen;       ///< Generation counter for RX timer events (0 for DIO)
 } sx127x_esp_dio_event_t;
+
+/**
+ * @brief Special event type for synthetic RX timeout events
+ */
+#define SX127X_ESP_EVENT_RX_TIMER 3U
 
 /**
  * @brief ESP32 context structure for SX127x radio
@@ -72,6 +78,13 @@ typedef struct {
   // State
   bool initialized;
   bool radio_busy;
+
+  // RX Timeout Timer (software emulation for SX127x continuous RX)
+  esp_timer_handle_t rx_timer;
+  void (*rx_timer_callback)(void *context);
+  volatile bool rx_timer_started;
+  volatile uint32_t rx_timer_gen;
+  portMUX_TYPE rx_timer_lock;
 
   // Configuration
   sx127x_esp_config_t config;

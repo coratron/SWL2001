@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include "esp_log.h"
 #include "esp_err.h"
 #include "driver/spi_master.h"
@@ -527,18 +528,171 @@ uint32_t sx127x_hal_get_dio_1_pin_state(const sx127x_t *radio)
 }
 
 /**
+ * @brief ESP timer callback for RX timeout
+ *
+ * Delivers the timeout as a synthetic event on the DIO event queue
+ * to avoid SPI transactions on the esp_timer task (spec §5.5).
+ */
+static void sx127x_esp_rx_timer_callback(void *arg)
+{
+    sx127x_esp_context_t *ctx = (sx127x_esp_context_t *)arg;
+    if (!ctx)
+    {
+        return;
+    }
+
+    /* Read started flag and generation counter under lock */
+    bool started;
+    uint32_t gen;
+    portENTER_CRITICAL(&ctx->rx_timer_lock);
+    started = ctx->rx_timer_started;
+    gen = ctx->rx_timer_gen;
+    if (started)
+    {
+        ctx->rx_timer_started = false;
+    }
+    portEXIT_CRITICAL(&ctx->rx_timer_lock);
+
+    if (!started)
+    {
+        /* Timer was stopped before expiry - stale callback */
+        return;
+    }
+
+    /* Queue synthetic event for DIO event task */
+    if (ctx->event_queue != NULL)
+    {
+        sx127x_esp_dio_event_t event = {
+            .dio_num = SX127X_ESP_EVENT_RX_TIMER,
+            .timestamp = esp_timer_get_time(),
+            .gen = gen
+        };
+
+        BaseType_t ret = xQueueSend(ctx->event_queue, &event, 0);
+        if (ret != pdTRUE)
+        {
+            ESP_LOGW(TAG, "RX timeout event queue full - dropped");
+        }
+        else
+        {
+            ESP_LOGD(TAG, "SX127x RX timeout queued (gen=%" PRIu32 ")", gen);
+        }
+    }
+    else
+    {
+        /* No event queue - log warning (should have been caught at start) */
+        ESP_LOGW(TAG, "RX timeout fired but no event queue configured");
+    }
+}
+
+/**
+ * @brief Warn if event queue is missing (one-time warning)
+ */
+static void sx127x_esp_warn_no_event_queue(void)
+{
+    static bool warned_once = false;
+    if (!warned_once)
+    {
+        ESP_LOGW(TAG, "RX timer started but no event queue - callback on expiry will warn");
+        warned_once = true;
+    }
+}
+
+/**
+ * @brief Create RX timeout timer (lazy initialization helper)
+ */
+static sx127x_hal_status_t sx127x_esp_create_rx_timer(sx127x_esp_context_t *ctx)
+{
+    const esp_timer_create_args_t timer_args = {
+        .callback = sx127x_esp_rx_timer_callback,
+        .arg = ctx,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "sx127x_rx_timeout",
+        .skip_unhandled_events = false
+    };
+
+    esp_err_t ret = esp_timer_create(&timer_args, &ctx->rx_timer);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create RX timeout timer: %s", esp_err_to_name(ret));
+        return SX127X_HAL_STATUS_ERROR;
+    }
+
+    ESP_LOGI(TAG, "SX127x RX timeout timer created (Class C support)");
+    return SX127X_HAL_STATUS_OK;
+}
+
+/**
  * @brief Start timer for SX127x operations
+ *
+ * Used to emulate hardware RX timeout for Class C continuous receive mode.
+ * The SX127x chip lacks hardware timeout in continuous RX, so LBM uses a
+ * 120s software timer to periodically re-launch RX and avoid radio planner
+ * failsafe (128s limit).
  */
 sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t time_in_ms,
                                            void (*callback)(void *context))
 {
-    // This function is typically used for RX timeout
-    // For ESP32, we can use esp_timer for high precision timing
-    // Implementation would depend on specific requirements
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx || !ctx->initialized)
+    {
+        return SX127X_HAL_STATUS_ERROR;
+    }
 
-    ESP_LOGD(TAG, "Timer start requested: %lu ms", time_in_ms);
+    if (!callback || time_in_ms == 0U)
+    {
+        ESP_LOGE(TAG, "Invalid timer parameters: callback=%p, time=%" PRIu32 " ms",
+                 (void *)callback, time_in_ms);
+        return SX127X_HAL_STATUS_ERROR;
+    }
 
-    // For now, return OK - full implementation would create esp_timer
+    if (ctx->event_queue == NULL)
+    {
+        sx127x_esp_warn_no_event_queue();
+    }
+
+    if (ctx->rx_timer == NULL)
+    {
+        if (sx127x_esp_create_rx_timer(ctx) != SX127X_HAL_STATUS_OK)
+        {
+            return SX127X_HAL_STATUS_ERROR;
+        }
+    }
+
+    /* Stop timer outside critical section (esp_timer_stop takes internal lock) */
+    (void)esp_timer_stop(ctx->rx_timer);
+
+    /* Update state under critical section */
+    portENTER_CRITICAL(&ctx->rx_timer_lock);
+    ctx->rx_timer_callback = callback;
+    ctx->rx_timer_gen++;
+    ctx->rx_timer_started = true;
+    portEXIT_CRITICAL(&ctx->rx_timer_lock);
+
+    /* Start timer outside critical section */
+    uint64_t timeout_us = (uint64_t)time_in_ms * 1000ULL;
+    esp_err_t ret = esp_timer_start_once(ctx->rx_timer, timeout_us);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to start RX timeout timer: %s", esp_err_to_name(ret));
+        /* Clear started flag on failure */
+        portENTER_CRITICAL(&ctx->rx_timer_lock);
+        ctx->rx_timer_started = false;
+        portEXIT_CRITICAL(&ctx->rx_timer_lock);
+        return SX127X_HAL_STATUS_ERROR;
+    }
+
+    static bool first_use = true;
+    if (first_use)
+    {
+        ESP_LOGI(TAG, "SX127x SW RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
+        first_use = false;
+    }
+    else
+    {
+        ESP_LOGD(TAG, "SX127x RX timeout timer armed: %" PRIu32 " ms", time_in_ms);
+    }
+
     return SX127X_HAL_STATUS_OK;
 }
 
@@ -547,9 +701,34 @@ sx127x_hal_status_t sx127x_hal_timer_start(const sx127x_t *radio, const uint32_t
  */
 sx127x_hal_status_t sx127x_hal_timer_stop(const sx127x_t *radio)
 {
-    ESP_LOGD(TAG, "Timer stop requested");
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx || !ctx->initialized)
+    {
+        return SX127X_HAL_STATUS_ERROR;
+    }
 
-    // For now, return OK - full implementation would stop esp_timer
+    /* Idempotent: safe to call even if not started */
+    if (ctx->rx_timer == NULL)
+    {
+        return SX127X_HAL_STATUS_OK;
+    }
+
+    /* Stop timer outside critical section */
+    esp_err_t ret = esp_timer_stop(ctx->rx_timer);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+    {
+        /* ESP_ERR_INVALID_STATE means timer wasn't running - that's OK */
+        ESP_LOGW(TAG, "Failed to stop RX timeout timer: %s", esp_err_to_name(ret));
+        return SX127X_HAL_STATUS_ERROR;
+    }
+
+    /* Update state under critical section - increment gen to invalidate any queued events */
+    portENTER_CRITICAL(&ctx->rx_timer_lock);
+    ctx->rx_timer_started = false;
+    ctx->rx_timer_gen++;
+    portEXIT_CRITICAL(&ctx->rx_timer_lock);
+
+    ESP_LOGD(TAG, "SX127x RX timeout timer stopped");
     return SX127X_HAL_STATUS_OK;
 }
 
@@ -558,8 +737,13 @@ sx127x_hal_status_t sx127x_hal_timer_stop(const sx127x_t *radio)
  */
 bool sx127x_hal_timer_is_started(const sx127x_t *radio)
 {
-    // For now, return false - full implementation would check esp_timer state
-    return false;
+    sx127x_esp_context_t *ctx = sx127x_esp_get_context(radio);
+    if (!ctx)
+    {
+        return false;
+    }
+
+    return ctx->rx_timer_started;
 }
 
 /**
